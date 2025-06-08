@@ -165,4 +165,41 @@ document.addEventListener('DOMContentLoaded', () => {
         attributes: true,
         attributeFilter: ['data-bs-theme']
     });
-}); 
+
+    // Format all timestamps
+    document.querySelectorAll('.timestamp').forEach(element => {
+        const utcString = element.getAttribute('data-utc');
+        if (utcString) {
+            element.textContent = formatTimestamp(utcString);
+        }
+    });
+});
+
+function formatTimestamp(utcString) {
+    try {
+        const date = new Date(utcString);
+        
+        // Validate date
+        if (isNaN(date.getTime())) {
+            console.error('Invalid date:', utcString);
+            return 'Invalid date';
+        }
+
+        // Use Intl.DateTimeFormat for better timezone handling
+        const options = {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+            timeZoneName: 'short'
+        };
+
+        return new Intl.DateTimeFormat(undefined, options).format(date);
+    } catch (error) {
+        console.error('Error formatting date:', error);
+        return 'Error formatting date';
+    }
+} 

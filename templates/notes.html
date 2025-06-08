@@ -72,15 +72,63 @@
                                 </div>
                                 <p class="card-text">{{ note.content }}</p>
                                 <div class="text-muted small">
-                                    <i class="bi bi-clock me-1"></i>Created: {{ note.created_at.strftime('%m/%d/%Y %I:%M:%S %p') }}
+                                    <i class="bi bi-clock me-1"></i>Created: <span class="timestamp" data-utc="{{ note.created_at.strftime('%Y-%m-%dT%H:%M:%S.%fZ') }}"></span>
                                     {% if note.updated_at != note.created_at %}
                                     <br>
-                                    <i class="bi bi-pencil me-1"></i>Updated: {{ note.updated_at.strftime('%m/%d/%Y %I:%M:%S %p') }}
+                                    <i class="bi bi-pencil me-1"></i>Updated: <span class="timestamp" data-utc="{{ note.updated_at.strftime('%Y-%m-%dT%H:%M:%S.%fZ') }}"></span>
                                     {% endif %}
                                 </div>
                             </div>
                         </div>
                         {% endfor %}
+
+                        {% if pagination.pages > 1 %}
+                        <nav aria-label="Notes pagination" class="mt-4">
+                            <ul class="pagination justify-content-center">
+                                {% if pagination.has_prev %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('notes', page=pagination.prev_num) }}" aria-label="Previous">
+                                        <span aria-hidden="true">&laquo;</span>
+                                    </a>
+                                </li>
+                                {% else %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">&laquo;</span>
+                                </li>
+                                {% endif %}
+
+                                {% for page in pagination.iter_pages(left_edge=2, left_current=2, right_current=3, right_edge=2) %}
+                                    {% if page %}
+                                        {% if page == pagination.page %}
+                                        <li class="page-item active">
+                                            <span class="page-link">{{ page }}</span>
+                                        </li>
+                                        {% else %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="{{ url_for('notes', page=page) }}">{{ page }}</a>
+                                        </li>
+                                        {% endif %}
+                                    {% else %}
+                                        <li class="page-item disabled">
+                                            <span class="page-link">...</span>
+                                        </li>
+                                    {% endif %}
+                                {% endfor %}
+
+                                {% if pagination.has_next %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('notes', page=pagination.next_num) }}" aria-label="Next">
+                                        <span aria-hidden="true">&raquo;</span>
+                                    </a>
+                                </li>
+                                {% else %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">&raquo;</span>
+                                </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -107,10 +155,50 @@
             setTheme(newTheme);
         }
 
-        // Initialize theme from localStorage
+        // Format timestamps to local timezone
+        function formatTimestamp(utcString) {
+            try {
+                // Parse the UTC string and create a Date object
+                const date = new Date(utcString);
+                
+                // Check if the date is valid
+                if (isNaN(date.getTime())) {
+                    console.error('Invalid date:', utcString);
+                    return 'Invalid date';
+                }
+
+                // Format the date in the user's local timezone
+                const options = {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: true,
+                    timeZoneName: 'short'
+                };
+
+                return new Intl.DateTimeFormat(undefined, options).format(date);
+            } catch (error) {
+                console.error('Error formatting date:', error);
+                return 'Error formatting date';
+            }
+        }
+
+        // Initialize theme and format timestamps
         document.addEventListener('DOMContentLoaded', function() {
+            // Set theme
             const savedTheme = localStorage.getItem('theme') || 'light';
             setTheme(savedTheme);
+
+            // Format all timestamps
+            document.querySelectorAll('.timestamp').forEach(element => {
+                const utcString = element.getAttribute('data-utc');
+                if (utcString) {
+                    element.textContent = formatTimestamp(utcString);
+                }
+            });
         });
     </script>
 </body>
