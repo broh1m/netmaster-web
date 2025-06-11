@@ -1,205 +1,136 @@
-<!DOCTYPE html>
-<html lang="en" data-bs-theme="light">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Notes - Subnet Calculator</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body>
-    <div class="container mt-5">
-        <button class="btn btn-outline-secondary theme-switch" onclick="toggleTheme()" title="Toggle Dark Mode">
-            <i class="bi bi-moon-fill"></i>
-        </button>
+{% extends "base.html" %}
 
-        <div class="row justify-content-center">
-            <div class="col-lg-8">
-                <div class="card p-4 animate__animated animate__fadeIn">
-                    <div class="d-flex justify-content-between align-items-center mb-4">
-                        <h1 class="mb-0">
-                            <i class="bi bi-journal-text me-2"></i>Notes
-                        </h1>
-                        <a href="{{ url_for('home') }}" class="btn btn-outline-primary">
-                            <i class="bi bi-calculator me-2"></i>Subnet Calculator
-                        </a>
-                    </div>
-
-                    {% with messages = get_flashed_messages(with_categories=true) %}
-                        {% if messages %}
-                            {% for category, message in messages %}
-                                <div class="alert alert-{{ category if category != 'error' else 'danger' }} animate__animated animate__fadeIn">
-                                    {{ message }}
-                                </div>
-                            {% endfor %}
-                        {% endif %}
-                    {% endwith %}
-
-                    <form method="POST" action="{{ url_for('create_note') }}" class="mb-4 animate__animated animate__fadeIn">
-                        <div class="mb-3">
-                            <label for="title" class="form-label">Title</label>
-                            <input type="text" class="form-control" id="title" name="title" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="content" class="form-label">Content</label>
-                            <textarea class="form-control" id="content" name="content" rows="4" required></textarea>
-                        </div>
-                        <div class="text-end">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-plus-circle me-2"></i>Create Note
-                            </button>
-                        </div>
-                    </form>
-
-                    <div class="notes-container">
-                        {% for note in notes %}
-                        <div class="card mb-3 animate__animated animate__fadeIn">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <h5 class="card-title">{{ note.title }}</h5>
-                                    <div class="d-flex gap-2">
-                                        <a href="{{ url_for('edit_note', note_id=note.id) }}" class="btn btn-outline-primary btn-sm">
-                                            <i class="bi bi-pencil"></i>
-                                        </a>
-                                        <form method="POST" action="{{ url_for('delete_note', note_id=note.id) }}" class="d-inline">
-                                            <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('Are you sure you want to delete this note?')">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        </form>
-                                    </div>
-                                </div>
-                                <p class="card-text">{{ note.content }}</p>
-                                <div class="text-muted small">
-                                    <i class="bi bi-clock me-1"></i>Created: <span class="timestamp" data-utc="{{ note.created_at.strftime('%Y-%m-%dT%H:%M:%S.%fZ') }}"></span>
-                                    {% if note.updated_at != note.created_at %}
-                                    <br>
-                                    <i class="bi bi-pencil me-1"></i>Updated: <span class="timestamp" data-utc="{{ note.updated_at.strftime('%Y-%m-%dT%H:%M:%S.%fZ') }}"></span>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                        {% endfor %}
-
-                        {% if pagination.pages > 1 %}
-                        <nav aria-label="Notes pagination" class="mt-4">
-                            <ul class="pagination justify-content-center">
-                                {% if pagination.has_prev %}
-                                <li class="page-item">
-                                    <a class="page-link" href="{{ url_for('notes', page=pagination.prev_num) }}" aria-label="Previous">
-                                        <span aria-hidden="true">&laquo;</span>
-                                    </a>
-                                </li>
-                                {% else %}
-                                <li class="page-item disabled">
-                                    <span class="page-link">&laquo;</span>
-                                </li>
-                                {% endif %}
-
-                                {% for page in pagination.iter_pages(left_edge=2, left_current=2, right_current=3, right_edge=2) %}
-                                    {% if page %}
-                                        {% if page == pagination.page %}
-                                        <li class="page-item active">
-                                            <span class="page-link">{{ page }}</span>
-                                        </li>
-                                        {% else %}
-                                        <li class="page-item">
-                                            <a class="page-link" href="{{ url_for('notes', page=page) }}">{{ page }}</a>
-                                        </li>
-                                        {% endif %}
-                                    {% else %}
-                                        <li class="page-item disabled">
-                                            <span class="page-link">...</span>
-                                        </li>
-                                    {% endif %}
-                                {% endfor %}
-
-                                {% if pagination.has_next %}
-                                <li class="page-item">
-                                    <a class="page-link" href="{{ url_for('notes', page=pagination.next_num) }}" aria-label="Next">
-                                        <span aria-hidden="true">&raquo;</span>
-                                    </a>
-                                </li>
-                                {% else %}
-                                <li class="page-item disabled">
-                                    <span class="page-link">&raquo;</span>
-                                </li>
-                                {% endif %}
-                            </ul>
-                        </nav>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
+{% block content %}
+<div class="container mt-4">
+    <div class="row mb-4 animate__animated animate__fadeIn">
+        <div class="col">
+            <h2><i class="bi bi-journal-text me-2"></i>My Notes</h2>
+        </div>
+        <div class="col text-end">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createNoteModal">
+                <i class="bi bi-plus-circle me-2"></i>Create New Note
+            </button>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="{{ url_for('static', filename='js/network-animation.js') }}"></script>
-    <script>
-        // Theme toggle functionality
-        function setTheme(theme) {
-            const html = document.documentElement;
-            html.setAttribute('data-bs-theme', theme);
-            
-            const icon = document.querySelector('.theme-switch i');
-            icon.className = theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
-            
-            localStorage.setItem('theme', theme);
-        }
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show animate__animated animate__fadeIn" 
+                     role="alert" 
+                     style="background-color: {% if category == 'error' %}#2c1f1f{% elif category == 'success' %}#1f2c1f{% else %}#1f1f2c{% endif %}; 
+                            border: 1px solid {% if category == 'error' %}#ff6b6b{% elif category == 'success' %}#6bff6b{% else %}#6b6bff{% endif %}; 
+                            color: {% if category == 'error' %}#ff6b6b{% elif category == 'success' %}#6bff6b{% else %}#6b6bff{% endif %};">
+                    <i class="bi {% if category == 'error' %}bi-exclamation-circle{% elif category == 'success' %}bi-check-circle{% else %}bi-info-circle{% endif %} me-2"></i>
+                    {{ message }}
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
 
-        function toggleTheme() {
-            const currentTheme = document.documentElement.getAttribute('data-bs-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            setTheme(newTheme);
-        }
+    {% if notes %}
+        <div class="row">
+            {% for note in notes %}
+                <div class="col-md-6 mb-4 animate__animated animate__fadeIn" style="animation-delay: {{ loop.index0 * 0.1 }}s">
+                    <div class="card note-card">
+                        <div class="card-body">
+                            <h5 class="card-title">{{ note.title }}</h5>
+                            <p class="card-text">{{ note.content }}</p>
+                            <div class="text-muted small">
+                                <i class="bi bi-clock me-1"></i>Created: <span class="local-timestamp" data-timestamp="{{ note.created_at.isoformat() }}">{{ note.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                                {% if note.updated_at != note.created_at %}
+                                    <br><i class="bi bi-pencil me-1"></i>Updated: <span class="local-timestamp" data-timestamp="{{ note.updated_at.isoformat() }}">{{ note.updated_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                                {% endif %}
+                            </div>
+                            <div class="mt-3">
+                                <a href="{{ url_for('edit_note', note_id=note.id) }}" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-pencil me-1"></i>Edit
+                                </a>
+                                <button type="button" class="btn btn-sm btn-outline-danger" 
+                                        onclick="showDeleteModal('{{ note.id }}', '{{ note.title | escapejs }}')">
+                                    <i class="bi bi-trash me-1"></i>Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
 
-        // Format timestamps to local timezone
-        function formatTimestamp(utcString) {
-            try {
-                // Parse the UTC string and create a Date object
-                const date = new Date(utcString);
-                
-                // Check if the date is valid
-                if (isNaN(date.getTime())) {
-                    console.error('Invalid date:', utcString);
-                    return 'Invalid date';
-                }
+        <!-- Pagination -->
+        {% if pagination.pages > 1 %}
+            <nav aria-label="Page navigation" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    {% if pagination.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('notes', page=pagination.prev_num) }}">
+                                <i class="bi bi-chevron-left"></i> Previous
+                            </a>
+                        </li>
+                    {% endif %}
+                    
+                    {% for page in pagination.iter_pages() %}
+                        {% if page %}
+                            <li class="page-item {% if page == pagination.page %}active{% endif %}">
+                                <a class="page-link" href="{{ url_for('notes', page=page) }}">{{ page }}</a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">...</span>
+                            </li>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if pagination.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('notes', page=pagination.next_num) }}">
+                                Next <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        {% endif %}
+    {% else %}
+        <div class="alert alert-info animate__animated animate__fadeIn">
+            <i class="bi bi-info-circle me-2"></i>You don't have any notes yet. Click the "Create New Note" button to create your first note!
+        </div>
+    {% endif %}
+</div>
 
-                // Format the date in the user's local timezone
-                const options = {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: true,
-                    timeZoneName: 'short'
-                };
+<!-- Create Note Modal -->
+<div class="modal fade" id="createNoteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>Create New Note</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form action="{{ url_for('create_note') }}" method="POST">
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label for="title" class="form-label">Title</label>
+                        <input type="text" class="form-control" id="title" name="title" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="content" class="form-label">Content</label>
+                        <textarea class="form-control" id="content" name="content" rows="5" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-plus-circle me-1"></i>Create Note
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
 
-                return new Intl.DateTimeFormat(undefined, options).format(date);
-            } catch (error) {
-                console.error('Error formatting date:', error);
-                return 'Error formatting date';
-            }
-        }
-
-        // Initialize theme and format timestamps
-        document.addEventListener('DOMContentLoaded', function() {
-            // Set theme
-            const savedTheme = localStorage.getItem('theme') || 'light';
-            setTheme(savedTheme);
-
-            // Format all timestamps
-            document.querySelectorAll('.timestamp').forEach(element => {
-                const utcString = element.getAttribute('data-utc');
-                if (utcString) {
-                    element.textContent = formatTimestamp(utcString);
-                }
-            });
-        });
-    </script>
-</body>
-</html> 
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dom-network-animation.js') }}"></script>
+{% endblock %} 

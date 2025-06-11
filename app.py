@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, send_from_directory, session
 import ipaddress
 import math
 import re
@@ -11,10 +11,66 @@ from sqlalchemy.exc import SQLAlchemyError, OperationalError, TimeoutError
 from contextlib import contextmanager
 import time
 import json
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask_wtf.csrf import CSRFProtect, CSRFError
+from werkzeug.security import generate_password_hash, check_password_hash
+import bleach
+from functools import wraps
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+# Custom exceptions for subnet calculation
+class SubnetCalculationError(Exception):
+    """Base exception for subnet calculation errors"""
+    pass
+
+class NetworkValidationError(SubnetCalculationError):
+    """Raised when network validation fails"""
+    pass
+
+class SegmentCountError(SubnetCalculationError):
+    """Raised when segment count is invalid"""
+    pass
+
+class VLANRangeError(SubnetCalculationError):
+    """Raised when VLAN ID is out of range"""
+    pass
+
+class NetworkSizeError(SubnetCalculationError):
+    """Raised when network size is invalid"""
+    pass
 
 app = Flask(__name__, static_folder='static')
 # Use environment variable for secret key, fallback to generated key
 app.secret_key = os.environ.get('FLASK_SECRET_KEY') or secrets.token_hex(32)
+
+# Add escapejs filter
+@app.template_filter('escapejs')
+def escapejs_filter(s):
+    if s is None:
+        return ''
+    return str(s).replace('\\', '\\\\').replace("'", "\\'").replace('"', '\\"').replace('\n', '\\n')
+
+# Security configurations
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
+app.config['WTF_CSRF_ENABLED'] = True
+app.config['WTF_CSRF_TIME_LIMIT'] = 3600  # 1 hour
+
+# Initialize security extensions
+csrf = CSRFProtect(app)
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+login_manager.login_message = 'Please log in to access this page.'
+
+# Initialize rate limiter
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"]
+)
 
 # Database configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///notes.db'
@@ -27,41 +83,110 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
 
 db = SQLAlchemy(app)
 
+# Create database tables
+with app.app_context():
+    db.create_all()
+
 # Store calculation progress
 calculation_progress = {}
 
-# Database connection retry decorator
+# Database connection retry decorator with enhanced error handling
 def with_db_retry(max_retries=3, delay=1):
     def decorator(func):
         def wrapper(*args, **kwargs):
             retries = 0
+            last_error = None
             while retries < max_retries:
                 try:
                     return func(*args, **kwargs)
-                except (OperationalError, sqlite3.OperationalError) as e:
+                except (OperationalError, sqlite3.OperationalError, TimeoutError) as e:
+                    last_error = e
                     retries += 1
                     if retries == max_retries:
                         app.logger.error(f"Database operation failed after {max_retries} retries: {str(e)}")
                         raise
-                    time.sleep(delay)
+                    time.sleep(delay * retries)  # Exponential backoff
+                except SQLAlchemyError as e:
+                    app.logger.error(f"SQLAlchemy error: {str(e)}")
+                    raise
             return None
         wrapper.__name__ = func.__name__
         return wrapper
     return decorator
 
-# Transaction context manager
+# Enhanced transaction context manager
 @contextmanager
 def transaction():
+    """Enhanced transaction context manager with timeout and error handling"""
     try:
+        # Set statement timeout for this transaction
+        db.session.execute('PRAGMA busy_timeout = 30000')  # 30 seconds timeout
         yield
         db.session.commit()
-    except Exception as e:
+    except SQLAlchemyError as e:
         db.session.rollback()
         app.logger.error(f"Transaction failed: {str(e)}")
         raise
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f"Unexpected error in transaction: {str(e)}")
+        raise
+    finally:
+        # Ensure session is properly closed
+        db.session.close()
+
+# Database health check function
+def check_db_health():
+    """Check database connection health"""
+    try:
+        # Try to execute a simple query
+        db.session.execute('SELECT 1')
+        return True
+    except Exception as e:
+        app.logger.error(f"Database health check failed: {str(e)}")
+        return False
+
+# Database connection manager
+class DatabaseConnectionManager:
+    """Manages database connections and provides connection health monitoring"""
+    
+    @staticmethod
+    def get_connection():
+        """Get a database connection with health check"""
+        if not check_db_health():
+            raise SQLAlchemyError("Database connection is not healthy")
+        return db.session
+
+    @staticmethod
+    def close_connection():
+        """Close the database connection"""
+        db.session.close()
+
+    @staticmethod
+    def execute_with_timeout(query, timeout=30):
+        """Execute a query with a timeout"""
+        try:
+            db.session.execute('PRAGMA busy_timeout = ?', (timeout * 1000,))
+            return db.session.execute(query)
+        except Exception as e:
+            app.logger.error(f"Query execution failed: {str(e)}")
+            raise
 
 def get_local_time():
     return datetime.now(timezone.utc)
+
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128))
+    notes = db.relationship('Note', backref='author', lazy=True)
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
 
 class Note(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -69,17 +194,292 @@ class Note(db.Model):
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=get_local_time, index=True)
     updated_at = db.Column(db.DateTime(timezone=True), default=get_local_time, onupdate=get_local_time, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
     def __repr__(self):
         return f'<Note {self.id}>'
 
-# Create the database tables
-with app.app_context():
+    @classmethod
+    def get_by_id(cls, note_id):
+        """Get a note by ID"""
+        return db.session.get(cls, note_id)
+
+    @classmethod
+    def get_all_paginated(cls, page, per_page, user_id):
+        """Get paginated notes for a specific user"""
+        return cls.query.filter_by(user_id=user_id).order_by(cls.created_at.desc()).paginate(
+            page=page, 
+            per_page=per_page,
+            error_out=False
+        )
+
+    def save(self):
+        """Save the note"""
+        db.session.add(self)
+        db.session.commit()
+        return self
+
+    def delete(self):
+        """Delete the note"""
+        db.session.delete(self)
+        db.session.commit()
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+def sanitize_input(text):
+    """Sanitize user input to prevent XSS attacks"""
+    if not text:
+        return text
+    # Remove HTML tags and encode special characters
+    return bleach.clean(text, strip=True)
+
+@app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user = User.query.filter_by(username=username).first()
+        
+        if user and user.check_password(password):
+            login_user(user)
+            return redirect(url_for('notes'))
+        flash('Invalid username or password', 'error')
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+@app.route('/register', methods=['GET', 'POST'])
+@limiter.limit("3 per hour")
+def register():
+    if request.method == 'POST':
+        try:
+            username = sanitize_input(request.form.get('username', '').strip())
+            email = sanitize_input(request.form.get('email', '').strip())
+            password = request.form.get('password', '').strip()
+            
+            # Validate username
+            if not username or len(username) < 3 or len(username) > 80:
+                flash('Username must be between 3 and 80 characters long', 'error')
+                return redirect(url_for('register'))
+            
+            # Validate email
+            if not email or '@' not in email or '.' not in email:
+                flash('Please enter a valid email address', 'error')
+                return redirect(url_for('register'))
+            
+            # Validate password
+            if not password or len(password) < 8:
+                flash('Password must be at least 8 characters long', 'error')
+                return redirect(url_for('register'))
+            
+            # Check if username exists
+            if User.query.filter_by(username=username).first():
+                flash('Username already exists', 'error')
+                return redirect(url_for('register'))
+            
+            # Check if email exists
+            if User.query.filter_by(email=email).first():
+                flash('Email already registered', 'error')
+                return redirect(url_for('register'))
+            
+            # Create new user
+            user = User(username=username, email=email)
+            user.set_password(password)
+            
+            try:
+                db.session.add(user)
+                db.session.commit()
+                login_user(user)
+                flash('Registration successful! Welcome to Subnet Calculator.', 'success')
+                return redirect(url_for('home'))
+            except SQLAlchemyError as e:
+                db.session.rollback()
+                app.logger.error(f"Database error during registration: {str(e)}")
+                flash('An error occurred during registration. Please try again.', 'error')
+                return redirect(url_for('register'))
+                
+        except Exception as e:
+            app.logger.error(f"Unexpected error during registration: {str(e)}")
+            flash('An unexpected error occurred. Please try again.', 'error')
+            return redirect(url_for('register'))
+            
+    return render_template('register.html')
+
+@app.route('/notes')
+@login_required
+# @limiter.limit("30 per minute")  # Temporarily commented out for debugging
+def notes():
     try:
-        db.create_all()
-    except SQLAlchemyError as e:
-        app.logger.error(f"Failed to create database tables: {str(e)}")
-        raise
+        page = request.args.get('page', 1, type=int)
+        per_page = 10
+        pagination = Note.get_all_paginated(page, per_page, current_user.id)
+        notes = pagination.items
+        return render_template('notes.html', notes=notes, pagination=pagination)
+    except Exception as e:
+        app.logger.error(f"Error fetching notes: {str(e)}")
+        flash('An error occurred while fetching notes', 'error')
+        return render_template('notes.html', notes=[], pagination=None)
+
+@app.route('/notes/create', methods=['POST'])
+@login_required
+@limiter.limit("10 per minute")
+def create_note():
+    try:
+        title = sanitize_input(request.form.get('title', '').strip())
+        content = sanitize_input(request.form.get('content', '').strip())
+        
+        if not title or not content:
+            flash('Title and content are required', 'error')
+            return redirect(url_for('notes'))
+        
+        note = Note(title=title, content=content, user_id=current_user.id)
+        note.save()
+        
+        flash('Note created successfully', 'success')
+        return redirect(url_for('notes'))
+    except Exception as e:
+        app.logger.error(f"Error creating note: {str(e)}")
+        flash('An error occurred while creating the note', 'error')
+        return redirect(url_for('notes'))
+
+@app.route('/notes/delete/<int:note_id>', methods=['POST'])
+@login_required
+# @limiter.limit("10 per minute") # Temporarily commented out for debugging
+def delete_note(note_id):
+    try:
+        app.logger.info(f"Delete note attempt - Note ID: {note_id}, Current User ID: {current_user.id}")
+        note = Note.get_by_id(note_id)
+        
+        if not note:
+            app.logger.warning(f"Note not found - Note ID: {note_id}")
+            flash('Note not found', 'error')
+            return redirect(url_for('notes'))
+            
+        if note.user_id != current_user.id:
+            app.logger.warning(f"Access denied - Note user_id: {note.user_id}, Current user_id: {current_user.id}")
+            flash('Access denied', 'error')
+            return redirect(url_for('notes'))
+        
+        note.delete()
+        app.logger.info(f"Note deleted successfully - Note ID: {note_id}")
+        flash('Note deleted successfully', 'success')
+        return redirect(url_for('notes'))
+        
+    except Exception as e:
+        app.logger.error(f"Error deleting note: {str(e)}", exc_info=True)
+        flash('An error occurred while deleting the note', 'error')
+        return redirect(url_for('notes'))
+
+@app.route('/notes/edit/<int:note_id>', methods=['GET', 'POST'])
+@login_required
+@limiter.limit("10 per minute")
+def edit_note(note_id):
+    try:
+        app.logger.info(f"Edit note attempt - Note ID: {note_id}, Current User ID: {current_user.id if current_user.is_authenticated else 'Not authenticated'}")
+        note = Note.get_by_id(note_id)
+        app.logger.info(f"Note found: {note is not None}")
+        if not note or note.user_id != current_user.id:
+            app.logger.warning(f"Access denied - Note user_id: {note.user_id if note else 'Note not found'}, Current user_id: {current_user.id}")
+            flash('Note not found or access denied', 'error')
+            return redirect(url_for('notes'))
+        
+        if request.method == 'POST':
+            title = sanitize_input(request.form.get('title', '').strip())
+            content = sanitize_input(request.form.get('content', '').strip())
+            
+            if not title or not content:
+                flash('Title and content are required', 'error')
+                return redirect(url_for('edit_note', note_id=note_id))
+            
+            note.title = title
+            note.content = content
+            note.save()
+            
+            flash('Note updated successfully', 'success')
+            return redirect(url_for('notes'))
+        
+        return render_template('edit_note.html', note=note)
+    except Exception as e:
+        app.logger.error(f"Error editing note: {str(e)}", exc_info=True)
+        flash('An error occurred while editing the note', 'error')
+        return redirect(url_for('notes'))
+
+@app.route('/calculate_subnets', methods=['POST'])
+def calculate_subnets_route():
+    try:
+        network_ip = request.form.get('network_ip', '').strip()
+        if not network_ip:
+            raise NetworkValidationError("Network IP is required")
+
+        try:
+            num_segments = int(request.form.get('num_segments', '1'))
+            if not 1 <= num_segments <= 64:
+                raise SegmentCountError("Number of segments must be between 1 and 64")
+        except ValueError:
+            raise SegmentCountError("Number of segments must be a valid integer")
+
+        try:
+            vlan_start = int(request.form.get('vlan_start', '1'))
+            if not 1 <= vlan_start <= 4094:
+                raise VLANRangeError("VLAN ID must be between 1 and 4094")
+        except ValueError:
+            raise VLANRangeError("VLAN ID must be a valid integer")
+        
+        # Generate a unique task ID
+        task_id = secrets.token_hex(16)
+        
+        # Initialize progress for this task ID
+        calculation_progress[task_id] = {
+            'progress': 0,
+            'results': [],
+            'error': None
+        }
+        
+        # Start calculation in a separate thread
+        import threading
+        thread = threading.Thread(
+            target=lambda: calculate_subnet(task_id, network_ip, num_segments, vlan_start)
+        )
+        thread.start()
+        
+        return jsonify({'status': 'started', 'task_id': task_id})
+
+    except SubnetCalculationError as e:
+        app.logger.error(f"Subnet calculation error: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+    except Exception as e:
+        app.logger.error(f"Unexpected error in calculate_subnets_route: {str(e)}")
+        # Catch all other exceptions and return a 500 error with a specific message
+        return jsonify({'status': 'error', 'message': f"An unexpected server error occurred: {str(e)}"}), 500
+
+@app.route('/get_progress/<task_id>')
+def get_progress(task_id):
+    progress_data = calculation_progress.get(task_id, {
+        'progress': 0,
+        'results': [],
+        'error': None
+    })
+    return jsonify(progress_data)
+
+@app.route('/', methods=['GET'])
+def home():
+    return render_template('index.html', 
+                         network_ip='', 
+                         num_segments='', 
+                         vlan_start='1')
+
+@app.errorhandler(CSRFError)
+def handle_csrf_error(e):
+    """Handle CSRF errors by returning a JSON response."""
+    app.logger.error(f"CSRF error: {e.description}")
+    return jsonify({'status': 'error', 'message': 'CSRF token missing or incorrect.'}), 400
 
 def validate_ip_cidr(ip_cidr):
     try:
@@ -161,17 +561,23 @@ def validate_ip_cidr(ip_cidr):
 
 def calculate_subnet(task_id, network_ip, num_segments, vlan_start):
     try:
+        # Validate network IP first
+        is_valid, error_msg = validate_ip_cidr(network_ip)
+        if not is_valid:
+            raise NetworkValidationError(error_msg)
+
         network = ipaddress.ip_network(network_ip, strict=True)
         required_prefix = network.prefixlen + math.ceil(math.log2(num_segments))
         
         if required_prefix > 32:
-            calculation_progress[task_id]['error'] = "Too many segments requested for the given network"
-            return
+            raise NetworkSizeError("Too many segments requested for the given network")
         
         max_possible_subnets = 2 ** (32 - required_prefix)
         if max_possible_subnets < num_segments:
-            calculation_progress[task_id]['error'] = f"Network {network_ip} can only support {max_possible_subnets} subnets with the required size"
-            return
+            raise NetworkSizeError(f"Network {network_ip} can only support {max_possible_subnets} subnets with the required size")
+        
+        if vlan_start + num_segments - 1 > 4094:
+            raise VLANRangeError("VLAN ID would exceed maximum value of 4094")
         
         subnet_generator = network.subnets(new_prefix=required_prefix)
         results = []
@@ -180,10 +586,6 @@ def calculate_subnet(task_id, network_ip, num_segments, vlan_start):
             try:
                 subnet = next(subnet_generator)
                 vlan_id = vlan_start + i
-                
-                if vlan_id > 4094:
-                    calculation_progress[task_id]['error'] = "VLAN ID would exceed maximum value of 4094"
-                    return
                 
                 network_address = subnet.network_address
                 broadcast_address = subnet.broadcast_address
@@ -223,195 +625,42 @@ def calculate_subnet(task_id, network_ip, num_segments, vlan_start):
                 time.sleep(0.30)
                 
             except StopIteration:
-                calculation_progress[task_id]['error'] = f"Not enough subnets available. Maximum possible: {len(results)}"
-                return
+                raise NetworkSizeError(f"Not enough subnets available. Maximum possible: {len(results)}")
         
         calculation_progress[task_id]['progress'] = 100 # Ensure 100% on completion
         
+    except SubnetCalculationError as e:
+        # Handle known calculation errors
+        app.logger.error(f"Subnet calculation error for task {task_id}: {str(e)}")
+        calculation_progress[task_id]['error'] = str(e)
     except Exception as e:
-        app.logger.error(f"Error in calculate_subnet for task {task_id}: {str(e)}")
-        calculation_progress[task_id]['error'] = f"An error occurred during calculation: {str(e)}"
+        # Handle unexpected errors
+        app.logger.error(f"Unexpected error in calculate_subnet for task {task_id}: {str(e)}")
+        calculation_progress[task_id]['error'] = "An unexpected error occurred during calculation. Please try again."
 
-@app.route('/calculate_subnets', methods=['POST'])
-def calculate_subnets_route():
-    network_ip = request.form.get('network_ip', '').strip()
-    num_segments = int(request.form.get('num_segments', '1'))
-    vlan_start = int(request.form.get('vlan_start', '1'))
-    
-    # Generate a unique task ID
-    task_id = secrets.token_hex(16)
-    
-    # Initialize progress for this task ID
-    calculation_progress[task_id] = {
-        'progress': 0,
-        'results': [],
-        'error': None
-    }
-    
-    # Start calculation in a separate thread
-    import threading
-    thread = threading.Thread(
-        target=lambda: calculate_subnet(task_id, network_ip, num_segments, vlan_start)
-    )
-    thread.start()
-    
-    return jsonify({'status': 'started', 'task_id': task_id})
+# Catch-all error handler to ensure JSON responses for all exceptions
+@app.errorhandler(Exception)
+def handle_uncaught_exception(e):
+    app.logger.error(f"An unhandled server error occurred: {e}", exc_info=True)
+    message = 'An unexpected server error occurred. Please try again later.'
+    if app.debug:
+        message = f"An unexpected server error occurred: {str(e)}"
+    response = jsonify({'status': 'error', 'message': message})
+    response.status_code = 500
+    return response
 
-@app.route('/get_progress/<task_id>')
-def get_progress(task_id):
-    progress_data = calculation_progress.get(task_id, {
-        'progress': 0,
-        'results': [],
-        'error': None
-    })
-    return jsonify(progress_data)
-
-@app.route('/', methods=['GET', 'POST'])
-def home():
-    if request.method == 'POST':
-        network_ip = request.form.get('network_ip', '').strip()
-        num_segments = request.form.get('num_segments', '').strip()
-        vlan_start = request.form.get('vlan_start', '1').strip()
-        
-        # Validate inputs before starting the async calculation
-        is_valid, error_msg = validate_ip_cidr(network_ip)
-        if not is_valid:
-            flash(error_msg, 'error')
-            return render_template('index.html', 
-                                network_ip=network_ip, 
-                                num_segments=num_segments, 
-                                vlan_start=vlan_start)
-        
-        try:
-            num_segments_int = int(num_segments)
-            if not 1 <= num_segments_int <= 64:
-                flash("Number of segments must be between 1 and 64", 'error')
-                return render_template('index.html', 
-                                    network_ip=network_ip, 
-                                    num_segments=num_segments, 
-                                    vlan_start=vlan_start)
-        except ValueError:
-            flash("Number of segments must be a valid integer", 'error')
-            return render_template('index.html', 
-                                network_ip=network_ip, 
-                                num_segments=num_segments, 
-                                vlan_start=vlan_start)
-        
-        try:
-            vlan_start_int = int(vlan_start)
-            if not 1 <= vlan_start_int <= 4094:
-                flash("VLAN ID must be between 1 and 4094", 'error')
-                return render_template('index.html', 
-                                    network_ip=network_ip, 
-                                    num_segments=num_segments, 
-                                    vlan_start=vlan_start)
-        except ValueError:
-            flash("VLAN ID must be a valid integer", 'error')
-            return render_template('index.html', 
-                                network_ip=network_ip, 
-                                num_segments=num_segments, 
-                                vlan_start=vlan_start)
-        
-        # If validation passes, the client-side JavaScript will handle starting the calculation
-        # No need to pass results here as they will be fetched via AJAX
-        return render_template('index.html', 
-                             network_ip=network_ip, 
-                             num_segments=num_segments, 
-                             vlan_start=vlan_start)
-    
-    return render_template('index.html', 
-                         network_ip='', 
-                         num_segments='', 
-                         vlan_start='1')
-
-@app.route('/notes')
-@with_db_retry()
-def notes():
-    try:
-        # Get page number from query parameters, default to 1
-        page = request.args.get('page', 1, type=int)
-        per_page = 10  # Number of notes per page
-        
-        # Query notes with pagination
-        pagination = Note.query.order_by(Note.created_at.desc()).paginate(
-            page=page, 
-            per_page=per_page,
-            error_out=False
-        )
-        
-        notes = pagination.items
-        
-        return render_template('notes.html', 
-                             notes=notes,
-                             pagination=pagination)
-    except Exception as e:
-        app.logger.error(f"Error fetching notes: {str(e)}")
-        flash('An error occurred while fetching notes', 'error')
-        return redirect(url_for('home'))
-
-@app.route('/notes/create', methods=['POST'])
-@with_db_retry()
-def create_note():
-    try:
-        title = request.form.get('title', '').strip()
-        content = request.form.get('content', '').strip()
-        
-        if not title or not content:
-            flash('Title and content are required', 'error')
-            return redirect(url_for('notes'))
-        
-        with transaction():
-            note = Note(title=title, content=content)
-            db.session.add(note)
-        
-        flash('Note created successfully', 'success')
-        return redirect(url_for('notes'))
-    except Exception as e:
-        app.logger.error(f"Error creating note: {str(e)}")
-        flash('An error occurred while creating the note', 'error')
-        return redirect(url_for('notes'))
-
-@app.route('/notes/delete/<int:note_id>', methods=['POST'])
-@with_db_retry()
-def delete_note(note_id):
-    try:
-        with transaction():
-            note = Note.query.get_or_404(note_id)
-            db.session.delete(note)
-        
-        flash('Note deleted successfully', 'success')
-        return redirect(url_for('notes'))
-    except Exception as e:
-        app.logger.error(f"Error deleting note: {str(e)}")
-        flash('An error occurred while deleting the note', 'error')
-        return redirect(url_for('notes'))
-
-@app.route('/notes/edit/<int:note_id>', methods=['GET', 'POST'])
-@with_db_retry()
-def edit_note(note_id):
-    try:
-        note = Note.query.get_or_404(note_id)
-        
-        if request.method == 'POST':
-            title = request.form.get('title', '').strip()
-            content = request.form.get('content', '').strip()
-            
-            if not title or not content:
-                flash('Title and content are required', 'error')
-                return redirect(url_for('edit_note', note_id=note_id))
-            
-            with transaction():
-                note.title = title
-                note.content = content
-            
-            flash('Note updated successfully', 'success')
-            return redirect(url_for('notes'))
-        
-        return render_template('edit_note.html', note=note)
-    except Exception as e:
-        app.logger.error(f"Error editing note: {str(e)}")
-        flash('An error occurred while editing the note', 'error')
-        return redirect(url_for('notes'))
+@app.route('/debug/notes')
+def debug_notes():
+    notes = Note.query.all()
+    return jsonify([{
+        'id': note.id,
+        'title': note.title,
+        'user_id': note.user_id,
+        'created_at': note.created_at.isoformat(),
+        'updated_at': note.updated_at.isoformat()
+    } for note in notes])
 
 if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
     app.run(debug=True)

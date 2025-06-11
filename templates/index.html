@@ -16,7 +16,7 @@
         </button>
 
         <div class="row justify-content-center">
-            <div class="col-lg-8">
+            <div class="col-lg-15">
                 <div class="card p-4 animate__animated animate__fadeIn">
                     <h1 class="animate__animated animate__fadeInDown">
                         <i class="bi bi-diagram-3-fill me-2"></i>
@@ -35,7 +35,18 @@
                     </div>
                     {% endif %}
 
-                    <form id="subnetForm" method="POST" action="{{ url_for('home') }}" class="mb-4 animate__animated animate__fadeIn">
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                        <div class="alert alert-{{ category if category != 'error' else 'danger' }} animate__animated animate__fadeIn">
+                            {{ message }}
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                    {% endwith %}
+
+                    <form id="subnetForm" method="POST" action="{{ url_for('calculate_subnets_route') }}" class="mb-4 animate__animated animate__fadeIn">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="mb-3">
                             <label for="network_ip" class="form-label">Network IP/CIDR</label>
                             <input type="text" class="form-control" id="network_ip" name="network_ip" 
@@ -137,7 +148,7 @@
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="{{ url_for('static', filename='js/network-animation.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/canvas-network-animation.js') }}"></script>
     <script>
         // Theme toggle functionality
         function setTheme(theme) {
@@ -156,6 +167,15 @@
             setTheme(newTheme);
         }
 
+        // Helper function to validate IP/CIDR format
+        function validateIpCidr(ipCidr) {
+            const regex = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/;
+            if (!regex.test(ipCidr)) {
+                return "Invalid IP/CIDR format. Expected format: xxx.xxx.xxx.xxx/xx";
+            }
+            return null; // Valid
+        }
+
         // Initialize theme and handle form submission
         document.addEventListener('DOMContentLoaded', function() {
             // Set theme
@@ -170,6 +190,26 @@
                     
                     const formData = new FormData(form);
                     const networkIp = formData.get('network_ip');
+                    const numSegments = formData.get('num_segments');
+                    const vlanStart = formData.get('vlan_start');
+
+                    // Client-side validation
+                    let errorMsg = null;
+
+                    errorMsg = validateIpCidr(networkIp);
+                    if (errorMsg) { alert(errorMsg); return; }
+
+                    const numSegmentsInt = parseInt(numSegments);
+                    if (isNaN(numSegmentsInt) || numSegmentsInt < 1 || numSegmentsInt > 64) {
+                        alert("Number of segments must be a valid integer between 1 and 64");
+                        return;
+                    }
+
+                    const vlanStartInt = parseInt(vlanStart);
+                    if (isNaN(vlanStartInt) || vlanStartInt < 1 || vlanStartInt > 4094) {
+                        alert("VLAN ID must be a valid integer between 1 and 4094");
+                        return;
+                    }
                     
                     // Show results section and reset progress bar
                     const resultsSection = document.getElementById('resultsSection');
@@ -184,89 +224,86 @@
                     progressBar.textContent = '0%';
                     document.getElementById('resultsTableBody').innerHTML = ''; // Clear previous results
 
-                    // Start calculation
-                    fetch('/calculate_subnets', {
-                        method: 'POST',
-                        body: formData
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.status === 'started' && data.task_id) {
-                            // Start polling for progress using the task_id
-                            pollProgress(data.task_id);
-                        } else if (data.error) {
-                            alert(data.error);
-                            document.getElementById('resultsSection').style.display = 'none'; // Hide results on error
+                    // Use standard form submission to trigger Flask route
+                    const xhr = new XMLHttpRequest();
+                    xhr.open(form.method, form.action);
+                    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                    xhr.onload = function() {
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            console.log('Raw XHR Response Text:', xhr.responseText); // Log the raw response
+                            const data = JSON.parse(xhr.responseText);
+                            if (data.status === 'started' && data.task_id) {
+                                pollProgress(data.task_id);
+                            } else if (data.error || data.message) {
+                                alert(`Error: ${data.message || data.error || 'An unknown error occurred.'}`);
+                                document.getElementById('resultsSection').style.display = 'none';
+                                progressBarContainer.style.display = 'none';
+                            }
+                        } else {
+                            alert(`An error occurred: ${xhr.status} ${xhr.statusText}. Please check your inputs or try again.`);
+                            document.getElementById('resultsSection').style.display = 'none';
+                            progressBarContainer.style.display = 'none';
                         }
-                    })
-                    .catch(error => {
-                        console.error('Error starting calculation:', error);
-                        alert('An error occurred while starting subnet calculation. Please check your inputs.');
-                        document.getElementById('resultsSection').style.display = 'none'; // Hide results on error
-                    });
+                    };
+                    xhr.onerror = function() {
+                        alert("Network error occurred. Please check your internet connection.");
+                        document.getElementById('resultsSection').style.display = 'none';
+                        progressBarContainer.style.display = 'none';
+                    };
+                    xhr.send(formData);
+
+                    // Polling function for progress
+                    function pollProgress(taskId) {
+                        const intervalId = setInterval(() => {
+                            fetch(`/get_progress/${taskId}`)
+                                .then(response => response.json())
+                                .then(data => {
+                                    progressBar.style.width = `${data.progress}%`;
+                                    progressBar.setAttribute('aria-valuenow', data.progress);
+                                    progressBar.textContent = `${data.progress}%`;
+
+                                    if (data.error) {
+                                        clearInterval(intervalId);
+                                        alert(`Calculation error: ${data.error}`);
+                                        resultsSection.style.display = 'none';
+                                        progressBarContainer.style.display = 'none';
+                                    } else if (data.progress === 100) {
+                                        clearInterval(intervalId);
+                                        updateResultsTable(data.results);
+                                        progressBarContainer.style.display = 'none';
+                                    } else if (data.results && data.results.length > 0) {
+                                        updateResultsTable(data.results);
+                                    }
+                                })
+                                .catch(error => {
+                                    clearInterval(intervalId);
+                                    console.error('Polling error:', error);
+                                    alert('An error occurred while fetching progress. Please try again.');
+                                    resultsSection.style.display = 'none';
+                                    progressBarContainer.style.display = 'none';
+                                });
+                        }, 500); // Poll every 500ms
+                    }
+
+                    // Function to update the results table
+                    function updateResultsTable(results) {
+                        const tableBody = document.getElementById('resultsTableBody');
+                        tableBody.innerHTML = ''; // Clear existing results
+                        results.forEach(result => {
+                            const row = tableBody.insertRow();
+                            row.insertCell().textContent = result.vlan_id;
+                            row.insertCell().textContent = result.network_id;
+                            row.insertCell().textContent = result.subnet_mask;
+                            row.insertCell().textContent = result.broadcast;
+                            row.insertCell().textContent = result.default_gateway;
+                            row.insertCell().textContent = result.usable_hosts;
+                            row.insertCell().textContent = result.first_usable;
+                            row.insertCell().textContent = result.last_usable;
+                        });
+                    }
                 });
             }
         });
-
-        function pollProgress(taskId) {
-            const progressBar = document.getElementById('calculationProgress');
-            const resultsTableBody = document.getElementById('resultsTableBody');
-            
-            function updateProgress() {
-                fetch(`/get_progress/${encodeURIComponent(taskId)}`)
-                    .then(response => {
-                        if (!response.ok) {
-                            // If response is not OK (e.g., 404, 500), throw an error
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        // Update progress bar
-                        progressBar.style.width = `${data.progress}%`;
-                        progressBar.setAttribute('aria-valuenow', data.progress);
-                        progressBar.textContent = `${data.progress}%`;
-                        
-                        // Update results table
-                        if (data.results && data.results.length > 0) {
-                            resultsTableBody.innerHTML = data.results.map(result => `
-                                <tr>
-                                    <td>${result.vlan_id}</td>
-                                    <td>${result.network_id}</td>
-                                    <td>${result.subnet_mask}</td>
-                                    <td>${result.broadcast}</td>
-                                    <td>${result.default_gateway}</td>
-                                    <td>${result.usable_hosts}</td>
-                                    <td>${result.first_usable}</td>
-                                    <td>${result.last_usable}</td>
-                                </tr>
-                            `).join('');
-                        }
-                        
-                        // Check for errors from the backend
-                        if (data.error) {
-                            alert(`Calculation error: ${data.error}`);
-                            document.getElementById('resultsSection').style.display = 'none'; // Hide results on error
-                            return;
-                        }
-                        
-                        // Continue polling if not complete
-                        if (data.progress < 100) {
-                            setTimeout(updateProgress, 100);
-                        } else {
-                            // Calculation complete, hide the progress bar
-                            progressBar.parentNode.style.display = 'none';
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error polling progress:', error);
-                        alert('An error occurred while checking calculation progress. Please check the console for details.');
-                        document.getElementById('resultsSection').style.display = 'none'; // Hide results on error
-                    });
-            }
-            
-            updateProgress();
-        }
     </script>
 </body>
 </html> 

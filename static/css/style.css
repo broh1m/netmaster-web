@@ -9,6 +9,11 @@
     --card-bg-dark: rgba(30, 30, 30, 0.9);
     --text-light: #2c3e50;
     --text-dark: #e9ecef;
+    
+    /* Network animation colors (Light Mode) */
+    --network-bg: linear-gradient(135deg, #f8f9fa 0%, #e0e0e0 100%);
+    --network-node-color: rgba(0, 0, 0, 0.3);
+    --network-line-color: linear-gradient(90deg, transparent, rgba(0, 0, 0, 0.1), transparent);
 }
 
 html {
@@ -19,6 +24,11 @@ html {
 
 html[data-bs-theme="dark"] {
     background-color: var(--background-dark);
+
+    /* Network animation colors (Dark Mode) */
+    --network-bg: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+    --network-node-color: rgba(255, 255, 255, 0.5);
+    --network-line-color: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
 }
 
 body {
@@ -85,6 +95,7 @@ html[data-bs-theme="dark"] .theme-switch {
     backdrop-filter: blur(10px);
     position: relative;
     z-index: 1;
+    animation: fadeIn 0.5s ease-out;
 }
 
 html[data-bs-theme="dark"] .card {
@@ -93,7 +104,7 @@ html[data-bs-theme="dark"] .card {
 
 .card:hover {
     transform: translateY(-5px);
-    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
 h1 {
@@ -332,4 +343,118 @@ html[data-bs-theme="dark"] .feature-item h5 {
 
 html[data-bs-theme="dark"] .text-muted {
     color: #adb5bd !important;
+}
+
+/* Network animation background */
+.network-background {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    background: var(--network-bg);
+    overflow: hidden;
+}
+
+.network-node {
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background-color: var(--network-node-color);
+    border-radius: 50%;
+    animation: fadeInOut 3s infinite;
+}
+
+.network-line {
+    position: absolute;
+    height: 1px;
+    background: var(--network-line-color);
+    transform-origin: left center;
+    animation: linePulse 3s infinite;
+}
+
+@keyframes fadeInOut {
+    0%, 100% { opacity: 0; }
+    50% { opacity: 1; }
+}
+
+@keyframes linePulse {
+    0%, 100% { opacity: 0; transform: scaleX(0); }
+    50% { opacity: 1; transform: scaleX(1); }
+}
+
+/* Theme-specific styles */
+[data-bs-theme="dark"] {
+    --bs-body-bg: #1a1a1a;
+    --bs-body-color: #ffffff;
+}
+
+[data-bs-theme="dark"] .card {
+    background-color: #2d2d2d;
+    border-color: #404040;
+}
+
+[data-bs-theme="dark"] .navbar {
+    background-color: #2d2d2d !important;
+}
+
+[data-bs-theme="dark"] .modal-content {
+    background-color: #2d2d2d;
+    border-color: #404040;
+}
+
+[data-bs-theme="dark"] .form-control {
+    background-color: #1a1a1a;
+    border-color: #404040;
+    color: #ffffff;
+}
+
+[data-bs-theme="dark"] .form-control:focus {
+    background-color: #1a1a1a;
+    border-color: #0d6efd;
+    color: #ffffff;
+}
+
+/* Custom button styles */
+.btn {
+    transition: all 0.3s ease;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Note card specific styles */
+.note-card {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.note-card .card-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.note-card .card-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+    
+    .card {
+        margin-bottom: 15px;
+    }
 } 
