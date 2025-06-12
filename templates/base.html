@@ -18,8 +18,8 @@
 
             <!-- This div will contain the centered brand on larger screens -->
             <div class="navbar-nav mx-auto order-0">
-                <a class="navbar-brand" href="{{ url_for('home') }}">
-                    <i class="bi bi-diagram-3-fill me-2"></i>Subnet Calculator with VLAN
+                <a class="navbar-brand" href="{{ url_for('landing') }}">
+                    <i class="bi bi-diagram-3-fill me-2"></i>NetMaster
                 </a>
             </div>
 
@@ -91,13 +91,35 @@
             document.querySelectorAll('.local-timestamp').forEach(function(element) {
                 const utcTimestamp = element.getAttribute('data-timestamp');
                 if (utcTimestamp) {
-                    const date = new Date(utcTimestamp);
-                    const options = {
-                        year: 'numeric', month: '2-digit', day: '2-digit',
-                        hour: '2-digit', minute: '2-digit', second: '2-digit',
-                        hour12: false // Use 24-hour format
-                    };
-                    element.textContent = date.toLocaleString(undefined, options);
+                    // Show loading state
+                    element.textContent = 'Converting...';
+                    
+                    try {
+                        const date = new Date(utcTimestamp);
+                        
+                        // Format date as MM/DD/YYYY
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const year = date.getFullYear();
+                        
+                        // Format time with timezone
+                        const hours = String(date.getHours()).padStart(2, '0');
+                        const minutes = String(date.getMinutes()).padStart(2, '0');
+                        const seconds = String(date.getSeconds()).padStart(2, '0');
+                        
+                        // Get timezone offset
+                        const timezoneOffset = -date.getTimezoneOffset();
+                        const timezoneHours = Math.floor(Math.abs(timezoneOffset) / 60);
+                        const timezoneMinutes = Math.abs(timezoneOffset) % 60;
+                        const timezoneSign = timezoneOffset >= 0 ? '+' : '-';
+                        const timezoneString = `${timezoneSign}${String(timezoneHours).padStart(2, '0')}:${String(timezoneMinutes).padStart(2, '0')}`;
+                        
+                        // Combine date and time with timezone
+                        element.textContent = `${month}/${day}/${year} ${hours}:${minutes}:${seconds} (UTC${timezoneString})`;
+                    } catch (error) {
+                        console.error('Error converting timestamp:', error);
+                        element.textContent = 'Error converting time';
+                    }
                 }
             });
         });

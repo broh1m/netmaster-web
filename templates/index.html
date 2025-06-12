@@ -1,309 +1,423 @@
-<!DOCTYPE html>
-<html lang="en" data-bs-theme="light">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Subnet Calculator with VLAN</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body>
-    <div class="container mt-5">
-        <button class="btn btn-outline-secondary theme-switch" onclick="toggleTheme()" title="Toggle Dark Mode">
-            <i class="bi bi-moon-fill"></i>
-        </button>
+{% extends "base.html" %}
 
-        <div class="row justify-content-center">
-            <div class="col-lg-15">
-                <div class="card p-4 animate__animated animate__fadeIn">
-                    <h1 class="animate__animated animate__fadeInDown">
-                        <i class="bi bi-diagram-3-fill me-2"></i>
-                        Subnet Calculator with VLAN
-                    </h1>
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-15">
+            <div class="card p-4 animate__animated animate__fadeIn">
+                <h1 class="animate__animated animate__fadeInDown">
+                    <i class="bi bi-diagram-3-fill me-2"></i>
+                    NetMaster Subnet Calculator
+                </h1>
 
-                    <div class="d-flex justify-content-end mb-4">
-                        <a href="{{ url_for('notes') }}" class="btn btn-outline-primary">
-                            <i class="bi bi-journal-text me-2"></i>Notes
-                        </a>
+                {% if error %}
+                <div class="alert alert-danger animate__animated animate__fadeIn">
+                    {{ error }}
+                </div>
+                {% endif %}
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                    <div class="alert alert-{{ category if category != 'error' else 'danger' }} animate__animated animate__fadeIn">
+                        {{ message }}
                     </div>
+                    {% endfor %}
+                {% endif %}
+                {% endwith %}
 
-                    {% if error %}
-                    <div class="alert alert-danger animate__animated animate__fadeIn">
-                        {{ error }}
+                <form id="subnetForm" class="mb-4 animate__animated animate__fadeIn">
+                    <input type="hidden" name="csrf_token" id="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label for="network_ip" class="form-label">Network IP/CIDR</label>
+                        <input type="text" class="form-control" id="network_ip" name="network_ip" 
+                               placeholder="e.g., 192.168.1.0/24" value="{{ network_ip }}" required>
                     </div>
-                    {% endif %}
-
-                    {% with messages = get_flashed_messages(with_categories=true) %}
-                    {% if messages %}
-                        {% for category, message in messages %}
-                        <div class="alert alert-{{ category if category != 'error' else 'danger' }} animate__animated animate__fadeIn">
-                            {{ message }}
-                        </div>
-                        {% endfor %}
-                    {% endif %}
-                    {% endwith %}
-
-                    <form id="subnetForm" method="POST" action="{{ url_for('calculate_subnets_route') }}" class="mb-4 animate__animated animate__fadeIn">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="mb-3">
-                            <label for="network_ip" class="form-label">Network IP/CIDR</label>
-                            <input type="text" class="form-control" id="network_ip" name="network_ip" 
-                                   placeholder="e.g., 192.168.1.0/24" value="{{ network_ip }}" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="num_segments" class="form-label">Number of Segments (Subnets)</label>
-                            <input type="number" class="form-control" id="num_segments" name="num_segments" 
-                                   min="1" max="64" value="{{ num_segments }}" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="vlan_start" class="form-label">Starting VLAN ID</label>
-                            <input type="number" class="form-control" id="vlan_start" name="vlan_start" 
-                                   min="1" max="4094" value="{{ vlan_start }}" required>
-                        </div>
-                        <div class="text-end">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-calculator me-2"></i>Calculate Subnets
-                            </button>
-                        </div>
-                    </form>
-
-                    <div id="resultsSection" class="table-responsive mt-4" style="display: none;">
-                        <div class="progress mb-3">
-                            <div id="calculationProgress" class="progress-bar progress-bar-striped progress-bar-animated" 
-                                 role="progressbar" 
-                                 style="width: 0%"
-                                 aria-valuenow="0" 
-                                 aria-valuemin="0" 
-                                 aria-valuemax="100">
-                                0%
+                    <div class="mb-3">
+                        <label class="form-label">Do you want to create a VLAN network from this address?</label>
+                        <div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="vlan_choice" id="vlan_yes" value="yes">
+                                <label class="form-check-label" for="vlan_yes">Yes</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="radio" name="vlan_choice" id="vlan_no" value="no" checked>
+                                <label class="form-check-label" for="vlan_no">No</label>
                             </div>
                         </div>
-                        <table class="table table-striped table-hover">
-                            <thead>
-                                <tr>
-                                    <th>VLAN ID</th>
-                                    <th>Network ID</th>
-                                    <th>Subnet Mask</th>
-                                    <th>Broadcast</th>
-                                    <th>Default Gateway</th>
-                                    <th>Usable Hosts</th>
-                                    <th>First Usable</th>
-                                    <th>Last Usable</th>
-                                </tr>
-                            </thead>
-                            <tbody id="resultsTableBody">
-                            </tbody>
-                        </table>
                     </div>
+                    <div id="vlan_section" style="display:none;">
+                        <div class="mb-3">
+                            <label for="num_vlans" class="form-label">Number of VLANs</label>
+                            <input type="number" class="form-control" id="num_vlans" name="num_vlans" min="1" max="64">
+                        </div>
+                        <div id="vlan_details"></div>
+                    </div>
+                    <div id="host_section" style="display:block;">
+                        <div class="mb-3">
+                            <label for="num_hosts" class="form-label">Number of Hosts</label>
+                            <input type="number" class="form-control" id="num_hosts" name="num_hosts" min="1" max="4094">
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-calculator me-2"></i>Calculate Subnets
+                        </button>
+                        <button type="button" id="downloadCsvBtn" class="btn btn-success ms-2">
+                            <i class="bi bi-download me-2"></i>Download as CSV
+                        </button>
+                        <button type="button" id="clearBtn" class="btn btn-outline-secondary ms-2">
+                            <i class="bi bi-x-circle me-2"></i>Clear
+                        </button>
+                    </div>
+                </form>
+
+                <div id="resultsSection" class="table-responsive mt-4" style="display: none;">
+                    <div class="progress mb-3">
+                        <div id="calculationProgress" class="progress-bar progress-bar-striped progress-bar-animated" 
+                             role="progressbar" 
+                             style="width: 0%"
+                             aria-valuenow="0" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100">
+                            0%
+                        </div>
+                    </div>
+                    <table class="table table-striped table-hover">
+                        <thead id="resultsTableHead">
+                            <!-- Dynamically filled -->
+                        </thead>
+                        <tbody id="resultsTableBody">
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
+</div>
 
-    <footer class="footer mt-5 py-4">
-        <div class="container">
-            <div class="row">
-                <div class="col-lg-8 mx-auto text-center">
-                    <h4 class="mb-3"><i class="bi bi-info-circle-fill me-2"></i>About This Tool</h4>
-                    <p class="mb-3">This subnet calculator helps network administrators divide a network into smaller, more manageable segments while maintaining proper IP addressing and VLAN configuration.</p>
-                    
-                    <div class="row mt-4">
-                        <div class="col-md-4">
-                            <div class="feature-item">
-                                <i class="bi bi-globe feature-icon"></i>
-                                <h5>Network Division</h5>
-                                <p>Split your network into multiple segments with proper subnetting</p>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="feature-item">
-                                <i class="bi bi-hash feature-icon"></i>
-                                <h5>VLAN Support</h5>
-                                <p>Assign VLAN IDs to each network segment (1-4094)</p>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="feature-item">
-                                <i class="bi bi-table feature-icon"></i>
-                                <h5>Detailed Results</h5>
-                                <p>View network ID, subnet mask, broadcast IP, and more</p>
-                            </div>
+<footer class="footer mt-5 py-4">
+    <div class="container">
+        <div class="row">
+            <div class="col-lg-8 mx-auto text-center">
+                <h4 class="mb-3"><i class="bi bi-info-circle-fill me-2"></i>About This Tool</h4>
+                <p class="mb-3">This subnet calculator helps network administrators divide a network into smaller, more manageable segments while maintaining proper IP addressing and VLAN configuration.</p>
+                
+                <div class="row mt-4">
+                    <div class="col-md-4">
+                        <div class="feature-item">
+                            <i class="bi bi-globe feature-icon"></i>
+                            <h5>Network Division</h5>
+                            <p>Split your network into multiple segments with proper subnetting</p>
                         </div>
                     </div>
-
-                    <div class="mt-4">
-                        <p class="text-muted">Enter a network IP in CIDR notation (e.g., 192.168.1.0/24) and specify the number of segments needed. The calculator will automatically determine the optimal subnet configuration.</p>
+                    <div class="col-md-4">
+                        <div class="feature-item">
+                            <i class="bi bi-hash feature-icon"></i>
+                            <h5>VLAN Support</h5>
+                            <p>Assign VLAN IDs to each network segment (1-4094)</p>
+                        </div>
                     </div>
-
-                    <div class="mt-4 pt-3 border-top">
-                        <p class="text-muted mb-0">
-                            <i class="bi bi-c-circle me-1"></i>KLASIK 2025™
-                        </p>
+                    <div class="col-md-4">
+                        <div class="feature-item">
+                            <i class="bi bi-table feature-icon"></i>
+                            <h5>Detailed Results</h5>
+                            <p>View network ID, subnet mask, broadcast IP, and more</p>
+                        </div>
                     </div>
+                </div>
+
+                <div class="mt-4">
+                    <p class="text-muted">Enter a network IP in CIDR notation (e.g., 192.168.1.0/24) and specify the number of segments needed. The calculator will automatically determine the optimal subnet configuration.</p>
+                </div>
+
+                <div class="mt-4 pt-3 border-top">
+                    <p class="text-muted mb-0">
+                        <i class="bi bi-c-circle me-1"></i>KLASIK 2025™
+                    </p>
                 </div>
             </div>
         </div>
-    </footer>
+    </div>
+</footer>
+{% endblock %}
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="{{ url_for('static', filename='js/canvas-network-animation.js') }}"></script>
-    <script>
-        // Theme toggle functionality
-        function setTheme(theme) {
-            const html = document.documentElement;
-            html.setAttribute('data-bs-theme', theme);
-            
-            const icon = document.querySelector('.theme-switch i');
-            icon.className = theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-fill';
-            
-            localStorage.setItem('theme', theme);
-        }
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/canvas-network-animation.js') }}"></script>
+<script>
+// Helper function to validate IP/CIDR format
+function validateIpCidr(ipCidr) {
+    const regex = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/;
+    if (!regex.test(ipCidr)) {
+        return "Invalid IP/CIDR format. Expected format: xxx.xxx.xxx.xxx/xx";
+    }
+    return null; // Valid
+}
 
-        function toggleTheme() {
-            const currentTheme = document.documentElement.getAttribute('data-bs-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            setTheme(newTheme);
-        }
+function createVlanInputs(num) {
+    let html = '';
+    for (let i = 0; i < num; i++) {
+        html += `<div class="row mb-2 align-items-end vlan-row">
+            <div class="col-md-4">
+                <label class="form-label">VLAN ID</label>
+                <input type="number" class="form-control vlan-id" min="1" max="4094" required placeholder="e.g., 10">
+            </div>
+            <div class="col-md-8">
+                <label class="form-label">VLAN Name</label>
+                <input type="text" class="form-control vlan-name" maxlength="50" required placeholder="e.g., Marketing">
+            </div>
+        </div>`;
+    }
+    return html;
+}
 
-        // Helper function to validate IP/CIDR format
-        function validateIpCidr(ipCidr) {
-            const regex = /^(\d{1,3}\.){3}\d{1,3}\/\d{1,2}$/;
-            if (!regex.test(ipCidr)) {
-                return "Invalid IP/CIDR format. Expected format: xxx.xxx.xxx.xxx/xx";
-            }
-            return null; // Valid
-        }
-
-        // Initialize theme and handle form submission
-        document.addEventListener('DOMContentLoaded', function() {
-            // Set theme
-            const savedTheme = localStorage.getItem('theme') || 'light';
-            setTheme(savedTheme);
-
-            // Handle form submission
-            const form = document.getElementById('subnetForm');
-            if (form) {
-                form.addEventListener('submit', function(e) {
-                    e.preventDefault();
-                    
-                    const formData = new FormData(form);
-                    const networkIp = formData.get('network_ip');
-                    const numSegments = formData.get('num_segments');
-                    const vlanStart = formData.get('vlan_start');
-
-                    // Client-side validation
-                    let errorMsg = null;
-
-                    errorMsg = validateIpCidr(networkIp);
-                    if (errorMsg) { alert(errorMsg); return; }
-
-                    const numSegmentsInt = parseInt(numSegments);
-                    if (isNaN(numSegmentsInt) || numSegmentsInt < 1 || numSegmentsInt > 64) {
-                        alert("Number of segments must be a valid integer between 1 and 64");
-                        return;
-                    }
-
-                    const vlanStartInt = parseInt(vlanStart);
-                    if (isNaN(vlanStartInt) || vlanStartInt < 1 || vlanStartInt > 4094) {
-                        alert("VLAN ID must be a valid integer between 1 and 4094");
-                        return;
-                    }
-                    
-                    // Show results section and reset progress bar
-                    const resultsSection = document.getElementById('resultsSection');
-                    resultsSection.style.display = 'block';
-
-                    const progressBarContainer = document.querySelector('#resultsSection .progress');
-                    progressBarContainer.style.display = 'block'; // Ensure progress bar container is visible
-
-                    const progressBar = document.getElementById('calculationProgress');
-                    progressBar.style.width = '0%';
-                    progressBar.setAttribute('aria-valuenow', '0');
-                    progressBar.textContent = '0%';
-                    document.getElementById('resultsTableBody').innerHTML = ''; // Clear previous results
-
-                    // Use standard form submission to trigger Flask route
-                    const xhr = new XMLHttpRequest();
-                    xhr.open(form.method, form.action);
-                    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-                    xhr.onload = function() {
-                        if (xhr.status >= 200 && xhr.status < 300) {
-                            console.log('Raw XHR Response Text:', xhr.responseText); // Log the raw response
-                            const data = JSON.parse(xhr.responseText);
-                            if (data.status === 'started' && data.task_id) {
-                                pollProgress(data.task_id);
-                            } else if (data.error || data.message) {
-                                alert(`Error: ${data.message || data.error || 'An unknown error occurred.'}`);
-                                document.getElementById('resultsSection').style.display = 'none';
-                                progressBarContainer.style.display = 'none';
-                            }
-                        } else {
-                            alert(`An error occurred: ${xhr.status} ${xhr.statusText}. Please check your inputs or try again.`);
-                            document.getElementById('resultsSection').style.display = 'none';
-                            progressBarContainer.style.display = 'none';
-                        }
-                    };
-                    xhr.onerror = function() {
-                        alert("Network error occurred. Please check your internet connection.");
-                        document.getElementById('resultsSection').style.display = 'none';
-                        progressBarContainer.style.display = 'none';
-                    };
-                    xhr.send(formData);
-
-                    // Polling function for progress
-                    function pollProgress(taskId) {
-                        const intervalId = setInterval(() => {
-                            fetch(`/get_progress/${taskId}`)
-                                .then(response => response.json())
-                                .then(data => {
-                                    progressBar.style.width = `${data.progress}%`;
-                                    progressBar.setAttribute('aria-valuenow', data.progress);
-                                    progressBar.textContent = `${data.progress}%`;
-
-                                    if (data.error) {
-                                        clearInterval(intervalId);
-                                        alert(`Calculation error: ${data.error}`);
-                                        resultsSection.style.display = 'none';
-                                        progressBarContainer.style.display = 'none';
-                                    } else if (data.progress === 100) {
-                                        clearInterval(intervalId);
-                                        updateResultsTable(data.results);
-                                        progressBarContainer.style.display = 'none';
-                                    } else if (data.results && data.results.length > 0) {
-                                        updateResultsTable(data.results);
-                                    }
-                                })
-                                .catch(error => {
-                                    clearInterval(intervalId);
-                                    console.error('Polling error:', error);
-                                    alert('An error occurred while fetching progress. Please try again.');
-                                    resultsSection.style.display = 'none';
-                                    progressBarContainer.style.display = 'none';
-                                });
-                        }, 500); // Poll every 500ms
-                    }
-
-                    // Function to update the results table
-                    function updateResultsTable(results) {
-                        const tableBody = document.getElementById('resultsTableBody');
-                        tableBody.innerHTML = ''; // Clear existing results
-                        results.forEach(result => {
-                            const row = tableBody.insertRow();
-                            row.insertCell().textContent = result.vlan_id;
-                            row.insertCell().textContent = result.network_id;
-                            row.insertCell().textContent = result.subnet_mask;
-                            row.insertCell().textContent = result.broadcast;
-                            row.insertCell().textContent = result.default_gateway;
-                            row.insertCell().textContent = result.usable_hosts;
-                            row.insertCell().textContent = result.first_usable;
-                            row.insertCell().textContent = result.last_usable;
-                        });
-                    }
-                });
+document.addEventListener('DOMContentLoaded', function() {
+    // VLAN/Host section toggle
+    document.getElementsByName('vlan_choice').forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.value === 'yes') {
+                document.getElementById('vlan_section').style.display = 'block';
+                document.getElementById('host_section').style.display = 'none';
+            } else {
+                document.getElementById('vlan_section').style.display = 'none';
+                document.getElementById('host_section').style.display = 'block';
             }
         });
-    </script>
-</body>
-</html> 
+    });
+    // Dynamic VLAN details
+    document.getElementById('num_vlans').addEventListener('input', function() {
+        const num = parseInt(this.value);
+        const detailsDiv = document.getElementById('vlan_details');
+        if (!isNaN(num) && num > 0 && num <= 64) {
+            detailsDiv.innerHTML = createVlanInputs(num);
+        } else {
+            detailsDiv.innerHTML = '';
+        }
+    });
+
+    // Form submission
+    document.getElementById('subnetForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const networkIp = document.getElementById('network_ip').value.trim();
+        const vlanChoice = document.querySelector('input[name="vlan_choice"]:checked').value;
+        const csrfToken = document.getElementById('csrf_token').value;
+        let payload = { network_ip: networkIp };
+
+        let errorMsg = validateIpCidr(networkIp);
+        if (errorMsg) { alert(errorMsg); return; }
+
+        if (vlanChoice === 'yes') {
+            const numVlans = parseInt(document.getElementById('num_vlans').value);
+            if (isNaN(numVlans) || numVlans < 1 || numVlans > 64) {
+                alert('Number of VLANs must be between 1 and 64.');
+                return;
+            }
+            const vlanRows = document.querySelectorAll('.vlan-row');
+            let vlans = [];
+            for (let row of vlanRows) {
+                const id = row.querySelector('.vlan-id').value;
+                const name = row.querySelector('.vlan-name').value.trim();
+                if (!id || !name) {
+                    alert('Please enter both VLAN ID and name for each VLAN.');
+                    return;
+                }
+                vlans.push({ vlan_id: id, vlan_name: name });
+            }
+            payload['vlan_mode'] = true;
+            payload['vlans'] = vlans;
+        } else {
+            const numHosts = parseInt(document.getElementById('num_hosts').value);
+            if (isNaN(numHosts) || numHosts < 1 || numHosts > 4094) {
+                alert('Number of hosts must be between 1 and 4094.');
+                return;
+            }
+            payload['vlan_mode'] = false;
+            payload['num_hosts'] = numHosts;
+        }
+
+        // Show results section and reset progress bar
+        const resultsSection = document.getElementById('resultsSection');
+        resultsSection.style.display = 'block';
+        const progressBarContainer = document.querySelector('#resultsSection .progress');
+        progressBarContainer.style.display = 'block';
+        const progressBar = document.getElementById('calculationProgress');
+        progressBar.style.width = '0%';
+        progressBar.setAttribute('aria-valuenow', '0');
+        progressBar.textContent = '0%';
+        document.getElementById('resultsTableBody').innerHTML = '';
+        document.getElementById('resultsTableHead').innerHTML = '';
+
+        // AJAX request
+        fetch('/calculate_subnets', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'started' && data.task_id) {
+                pollProgress(data.task_id, vlanChoice === 'yes');
+            } else if (data.error || data.message) {
+                alert(`Error: ${data.message || data.error || 'An unknown error occurred.'}`);
+                resultsSection.style.display = 'none';
+                progressBarContainer.style.display = 'none';
+            }
+        })
+        .catch(() => {
+            alert('An error occurred. Please try again.');
+            resultsSection.style.display = 'none';
+            progressBarContainer.style.display = 'none';
+        });
+    });
+
+    // Polling function for progress
+    function pollProgress(taskId, vlanMode) {
+        const progressBar = document.getElementById('calculationProgress');
+        const resultsSection = document.getElementById('resultsSection');
+        const progressBarContainer = document.querySelector('#resultsSection .progress');
+        const tableHead = document.getElementById('resultsTableHead');
+        const tableBody = document.getElementById('resultsTableBody');
+        const intervalId = setInterval(() => {
+            fetch(`/get_progress/${taskId}`)
+                .then(response => response.json())
+                .then(data => {
+                    progressBar.style.width = `${data.progress}%`;
+                    progressBar.setAttribute('aria-valuenow', data.progress);
+                    progressBar.textContent = `${data.progress}%`;
+
+                    if (data.error) {
+                        clearInterval(intervalId);
+                        alert(`Calculation error: ${data.error}`);
+                        resultsSection.style.display = 'none';
+                        progressBarContainer.style.display = 'none';
+                    } else if (data.progress === 100) {
+                        clearInterval(intervalId);
+                        updateResultsTable(data.results, vlanMode);
+                        progressBarContainer.style.display = 'none';
+                    } else if (data.results && data.results.length > 0) {
+                        updateResultsTable(data.results, vlanMode);
+                    }
+                })
+                .catch(error => {
+                    clearInterval(intervalId);
+                    alert('An error occurred while fetching progress. Please try again.');
+                    resultsSection.style.display = 'none';
+                    progressBarContainer.style.display = 'none';
+                });
+        }, 500);
+    }
+
+    // Function to update the results table
+    function updateResultsTable(results, vlanMode) {
+        const tableHead = document.getElementById('resultsTableHead');
+        const tableBody = document.getElementById('resultsTableBody');
+        tableBody.innerHTML = '';
+        if (vlanMode) {
+            tableHead.innerHTML = `<tr>
+                <th>VLAN ID</th>
+                <th>VLAN Name</th>
+                <th>Network ID</th>
+                <th>Subnet Mask</th>
+                <th>Broadcast</th>
+                <th>Default Gateway</th>
+                <th>Usable Hosts</th>
+                <th>First Usable</th>
+                <th>Last Usable</th>
+            </tr>`;
+            results.forEach(result => {
+                const row = tableBody.insertRow();
+                row.insertCell().textContent = result.vlan_id;
+                row.insertCell().textContent = result.vlan_name;
+                row.insertCell().textContent = result.network_id;
+                row.insertCell().textContent = result.subnet_mask;
+                row.insertCell().textContent = result.broadcast;
+                row.insertCell().textContent = result.default_gateway;
+                row.insertCell().textContent = result.usable_hosts;
+                row.insertCell().textContent = result.first_usable;
+                row.insertCell().textContent = result.last_usable;
+            });
+        } else {
+            tableHead.innerHTML = `<tr>
+                <th>Network ID</th>
+                <th>Subnet Mask</th>
+                <th>Broadcast</th>
+                <th>Default Gateway</th>
+                <th>Usable Hosts</th>
+                <th>First Usable</th>
+                <th>Last Usable</th>
+            </tr>`;
+            results.forEach(result => {
+                const row = tableBody.insertRow();
+                row.insertCell().textContent = result.network_id;
+                row.insertCell().textContent = result.subnet_mask;
+                row.insertCell().textContent = result.broadcast;
+                row.insertCell().textContent = result.default_gateway;
+                row.insertCell().textContent = result.usable_hosts;
+                row.insertCell().textContent = result.first_usable;
+                row.insertCell().textContent = result.last_usable;
+            });
+        }
+    }
+
+    // Download as CSV functionality
+    document.getElementById('downloadCsvBtn').addEventListener('click', function() {
+        const tableBody = document.getElementById('resultsTableBody');
+        const tableHead = document.getElementById('resultsTableHead');
+        if (!tableBody || tableBody.rows.length === 0) {
+            alert('No results to download. Please calculate subnets first.');
+            return;
+        }
+        let csv = '';
+        // Add headers
+        if (tableHead) {
+            let headerRow = [];
+            for (let th of tableHead.querySelectorAll('th')) {
+                headerRow.push('"' + th.textContent.replace(/"/g, '""') + '"');
+            }
+            csv += headerRow.join(',') + '\n';
+        }
+        // Add rows
+        for (let row of tableBody.rows) {
+            let rowData = [];
+            for (let cell of row.cells) {
+                rowData.push('"' + cell.textContent.replace(/"/g, '""') + '"');
+            }
+            csv += rowData.join(',') + '\n';
+        }
+        // Download CSV
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'subnet_results.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+
+    // Clear button functionality
+    document.getElementById('clearBtn').addEventListener('click', function() {
+        // Reset form fields
+        document.getElementById('subnetForm').reset();
+        // Hide VLAN section and show host section by default
+        document.getElementById('vlan_section').style.display = 'none';
+        document.getElementById('host_section').style.display = 'block';
+        document.getElementById('vlan_details').innerHTML = '';
+        // Clear results
+        document.getElementById('resultsSection').style.display = 'none';
+        document.getElementById('resultsTableBody').innerHTML = '';
+        document.getElementById('resultsTableHead').innerHTML = '';
+        // Reset progress bar
+        const progressBar = document.getElementById('calculationProgress');
+        progressBar.style.width = '0%';
+        progressBar.setAttribute('aria-valuenow', '0');
+        progressBar.textContent = '0%';
+    });
+});
+</script>
+{% endblock %} 

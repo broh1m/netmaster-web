@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8 text-center">
+            <h1 class="display-4 mb-4 animate__animated animate__fadeInDown">
+                <i class="bi bi-diagram-3-fill me-2"></i>Welcome to Subnet Calculator with VLAN
+            </h1>
+            <p class="lead mb-4 animate__animated animate__fadeIn">
+                This web application helps network administrators and IT professionals easily divide a network into smaller, more manageable segments while maintaining proper IP addressing and VLAN configuration.
+            </p>
+            <div class="mb-4 animate__animated animate__fadeInUp">
+                <a href="{{ url_for('home') }}" class="btn btn-primary btn-lg me-2">
+                    <i class="bi bi-calculator me-1"></i>Start Calculating
+                </a>
+                <a href="{{ url_for('register') }}" class="btn btn-outline-success btn-lg">
+                    <i class="bi bi-person-plus me-1"></i>Register
+                </a>
+            </div>
+            <hr class="my-4">
+            <div class="row mt-4">
+                <div class="col-md-4">
+                    <div class="feature-item">
+                        <i class="bi bi-globe feature-icon display-5 mb-2"></i>
+                        <h5>Network Division</h5>
+                        <p>Split your network into multiple segments with proper subnetting and see all the details you need.</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="feature-item">
+                        <i class="bi bi-hash feature-icon display-5 mb-2"></i>
+                        <h5>VLAN Support</h5>
+                        <p>Assign VLAN IDs to each network segment (1-4094) for organized and secure network management.</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="feature-item">
+                        <i class="bi bi-journal-text feature-icon display-5 mb-2"></i>
+                        <h5>Notes & History</h5>
+                        <p>Save your subnetting results as notes for future reference and easy documentation.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-5 animate__animated animate__fadeIn">
+                <p class="text-muted">Subnet Calculator with VLAN is designed to make network planning, documentation, and management simple and efficient for everyone from students to professionals.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -173,6 +173,8 @@ class DatabaseConnectionManager:
             raise
 
 def get_local_time():
+    """Returns the current time in UTC.
+    Note: We store all times in UTC in the database, and convert to local time in the templates."""
     return datetime.now(timezone.utc)
 
 class User(UserMixin, db.Model):
@@ -414,49 +416,64 @@ def edit_note(note_id):
 @app.route('/calculate_subnets', methods=['POST'])
 def calculate_subnets_route():
     try:
-        network_ip = request.form.get('network_ip', '').strip()
+        if request.is_json:
+            data = request.get_json()
+            network_ip = data.get('network_ip', '').strip()
+            vlan_mode = data.get('vlan_mode', False)
+        else:
+            network_ip = request.form.get('network_ip', '').strip()
+            vlan_mode = False
+
         if not network_ip:
             raise NetworkValidationError("Network IP is required")
 
-        try:
-            num_segments = int(request.form.get('num_segments', '1'))
-            if not 1 <= num_segments <= 64:
-                raise SegmentCountError("Number of segments must be between 1 and 64")
-        except ValueError:
-            raise SegmentCountError("Number of segments must be a valid integer")
-
-        try:
-            vlan_start = int(request.form.get('vlan_start', '1'))
-            if not 1 <= vlan_start <= 4094:
-                raise VLANRangeError("VLAN ID must be between 1 and 4094")
-        except ValueError:
-            raise VLANRangeError("VLAN ID must be a valid integer")
-        
-        # Generate a unique task ID
-        task_id = secrets.token_hex(16)
-        
-        # Initialize progress for this task ID
-        calculation_progress[task_id] = {
-            'progress': 0,
-            'results': [],
-            'error': None
-        }
-        
-        # Start calculation in a separate thread
-        import threading
-        thread = threading.Thread(
-            target=lambda: calculate_subnet(task_id, network_ip, num_segments, vlan_start)
-        )
-        thread.start()
-        
-        return jsonify({'status': 'started', 'task_id': task_id})
-
+        # VLAN mode
+        if vlan_mode:
+            vlans = data.get('vlans', [])
+            if not vlans or not isinstance(vlans, list):
+                raise SegmentCountError("VLAN details are required")
+            num_segments = len(vlans)
+            vlan_ids = [int(v['vlan_id']) for v in vlans]
+            vlan_names = [v['vlan_name'] for v in vlans]
+            # Generate a unique task ID
+            task_id = secrets.token_hex(16)
+            calculation_progress[task_id] = {
+                'progress': 0,
+                'results': [],
+                'error': None
+            }
+            import threading
+            thread = threading.Thread(
+                target=lambda: calculate_vlan_subnet(task_id, network_ip, vlans)
+            )
+            thread.start()
+            return jsonify({'status': 'started', 'task_id': task_id})
+        else:
+            # Host-based mode
+            try:
+                num_hosts = int(data.get('num_hosts', '1'))
+                if not 1 <= num_hosts <= 4094:
+                    raise SegmentCountError("Number of hosts must be between 1 and 4094")
+            except ValueError:
+                raise SegmentCountError("Number of hosts must be a valid integer")
+            # Generate a unique task ID
+            task_id = secrets.token_hex(16)
+            calculation_progress[task_id] = {
+                'progress': 0,
+                'results': [],
+                'error': None
+            }
+            import threading
+            thread = threading.Thread(
+                target=lambda: calculate_host_subnet(task_id, network_ip, num_hosts)
+            )
+            thread.start()
+            return jsonify({'status': 'started', 'task_id': task_id})
     except SubnetCalculationError as e:
         app.logger.error(f"Subnet calculation error: {str(e)}")
         return jsonify({'status': 'error', 'message': str(e)}), 400
     except Exception as e:
         app.logger.error(f"Unexpected error in calculate_subnets_route: {str(e)}")
-        # Catch all other exceptions and return a 500 error with a specific message
         return jsonify({'status': 'error', 'message': f"An unexpected server error occurred: {str(e)}"}), 500
 
 @app.route('/get_progress/<task_id>')
@@ -468,7 +485,15 @@ def get_progress(task_id):
     })
     return jsonify(progress_data)
 
-@app.route('/', methods=['GET'])
+@app.route('/landing')
+def landing():
+    return render_template('landing.html')
+
+@app.route('/')
+def root():
+    return redirect(url_for('landing'))
+
+@app.route('/calculator', methods=['GET'])
 def home():
     return render_template('index.html', 
                          network_ip='', 
@@ -559,38 +584,26 @@ def validate_ip_cidr(ip_cidr):
     except Exception as e:
         return False, f"Validation error: {str(e)}"
 
-def calculate_subnet(task_id, network_ip, num_segments, vlan_start):
+def calculate_vlan_subnet(task_id, network_ip, vlans):
     try:
-        # Validate network IP first
         is_valid, error_msg = validate_ip_cidr(network_ip)
         if not is_valid:
             raise NetworkValidationError(error_msg)
-
         network = ipaddress.ip_network(network_ip, strict=True)
+        num_segments = len(vlans)
         required_prefix = network.prefixlen + math.ceil(math.log2(num_segments))
-        
         if required_prefix > 32:
-            raise NetworkSizeError("Too many segments requested for the given network")
-        
-        max_possible_subnets = 2 ** (32 - required_prefix)
-        if max_possible_subnets < num_segments:
-            raise NetworkSizeError(f"Network {network_ip} can only support {max_possible_subnets} subnets with the required size")
-        
-        if vlan_start + num_segments - 1 > 4094:
-            raise VLANRangeError("VLAN ID would exceed maximum value of 4094")
-        
+            raise NetworkSizeError("Too many VLANs requested for the given network")
         subnet_generator = network.subnets(new_prefix=required_prefix)
         results = []
-        
-        for i in range(num_segments):
+        for i, vlan in enumerate(vlans):
             try:
                 subnet = next(subnet_generator)
-                vlan_id = vlan_start + i
-                
+                vlan_id = int(vlan['vlan_id'])
+                vlan_name = vlan['vlan_name']
                 network_address = subnet.network_address
                 broadcast_address = subnet.broadcast_address
                 usable_hosts = subnet.num_addresses - 2 if subnet.num_addresses > 2 else 0
-                
                 default_gateway = None
                 if subnet.num_addresses > 2:
                     try:
@@ -601,9 +614,9 @@ def calculate_subnet(task_id, network_ip, num_segments, vlan_start):
                             default_gateway = 'N/A'
                     except Exception:
                         default_gateway = 'N/A'
-                
                 result = {
                     'vlan_id': vlan_id,
+                    'vlan_name': vlan_name,
                     'network_id': str(network_address),
                     'subnet_mask': str(subnet.netmask),
                     'broadcast': str(broadcast_address),
@@ -612,7 +625,6 @@ def calculate_subnet(task_id, network_ip, num_segments, vlan_start):
                     'first_usable': str(list(subnet.hosts())[0]) if usable_hosts > 0 else 'N/A',
                     'last_usable': str(list(subnet.hosts())[-1]) if usable_hosts > 0 else 'N/A'
                 }
-                
                 results.append(result)
                 progress = int((i + 1) / num_segments * 100)
                 calculation_progress[task_id] = {
@@ -620,22 +632,69 @@ def calculate_subnet(task_id, network_ip, num_segments, vlan_start):
                     'results': results,
                     'error': None
                 }
-                
-                # Add a small delay to visualize progress
-                time.sleep(0.30)
-                
+                time.sleep(0.15)
             except StopIteration:
                 raise NetworkSizeError(f"Not enough subnets available. Maximum possible: {len(results)}")
-        
-        calculation_progress[task_id]['progress'] = 100 # Ensure 100% on completion
-        
+        calculation_progress[task_id]['progress'] = 100
     except SubnetCalculationError as e:
-        # Handle known calculation errors
         app.logger.error(f"Subnet calculation error for task {task_id}: {str(e)}")
         calculation_progress[task_id]['error'] = str(e)
     except Exception as e:
-        # Handle unexpected errors
-        app.logger.error(f"Unexpected error in calculate_subnet for task {task_id}: {str(e)}")
+        app.logger.error(f"Unexpected error in calculate_vlan_subnet for task {task_id}: {str(e)}")
+        calculation_progress[task_id]['error'] = "An unexpected error occurred during calculation. Please try again."
+
+def calculate_host_subnet(task_id, network_ip, num_hosts):
+    try:
+        is_valid, error_msg = validate_ip_cidr(network_ip)
+        if not is_valid:
+            raise NetworkValidationError(error_msg)
+        network = ipaddress.ip_network(network_ip, strict=True)
+        # Find the smallest prefix that can fit the number of hosts
+        needed = num_hosts + 2  # network + broadcast
+        prefix = 32
+        for p in range(network.prefixlen, 33):
+            if 2 ** (32 - p) >= needed:
+                prefix = p
+                break
+        subnet_generator = network.subnets(new_prefix=prefix)
+        results = []
+        for i, subnet in enumerate(subnet_generator):
+            usable_hosts = subnet.num_addresses - 2 if subnet.num_addresses > 2 else 0
+            if usable_hosts < num_hosts:
+                continue
+            network_address = subnet.network_address
+            broadcast_address = subnet.broadcast_address
+            default_gateway = None
+            if subnet.num_addresses > 2:
+                try:
+                    hosts = list(subnet.hosts())
+                    if hosts:
+                        default_gateway = str(hosts[0])
+                    else:
+                        default_gateway = 'N/A'
+                except Exception:
+                    default_gateway = 'N/A'
+            result = {
+                'network_id': str(network_address),
+                'subnet_mask': str(subnet.netmask),
+                'broadcast': str(broadcast_address),
+                'default_gateway': default_gateway or 'N/A',
+                'usable_hosts': usable_hosts,
+                'first_usable': str(list(subnet.hosts())[0]) if usable_hosts > 0 else 'N/A',
+                'last_usable': str(list(subnet.hosts())[-1]) if usable_hosts > 0 else 'N/A'
+            }
+            results.append(result)
+            calculation_progress[task_id] = {
+                'progress': 100,
+                'results': results,
+                'error': None
+            }
+            break  # Only need one subnet for the required hosts
+    except SubnetCalculationError as e:
+        app.logger.error(f"Subnet calculation error for task {task_id}: {str(e)}")
+        calculation_progress[task_id]['error'] = str(e)
+    except Exception as e:
+        app.logger.error(f"Unexpected error in calculate_host_subnet for task {task_id}: {str(e)}")
         calculation_progress[task_id]['error'] = "An unexpected error occurred during calculation. Please try again."
 
 # Catch-all error handler to ensure JSON responses for all exceptions
@@ -659,6 +718,24 @@ def debug_notes():
         'created_at': note.created_at.isoformat(),
         'updated_at': note.updated_at.isoformat()
     } for note in notes])
+
+@app.route('/notes/from_calculator', methods=['POST'])
+@login_required
+def add_note_from_calculator():
+    if not request.is_json:
+        return jsonify({'status': 'error', 'message': 'Invalid request format.'}), 400
+    data = request.get_json()
+    title = sanitize_input(data.get('title', '').strip())
+    content = sanitize_input(data.get('content', '').strip())
+    if not title or not content:
+        return jsonify({'status': 'error', 'message': 'Title and content are required.'}), 400
+    try:
+        note = Note(title=title, content=content, user_id=current_user.id)
+        note.save()
+        return jsonify({'status': 'success', 'message': 'Note created successfully.'})
+    except Exception as e:
+        app.logger.error(f"Error creating note from calculator: {str(e)}")
+        return jsonify({'status': 'error', 'message': 'Failed to create note.'}), 500
 
 if __name__ == '__main__':
     with app.app_context():
