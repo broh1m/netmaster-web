@@ -1,0 +1,101 @@
+/* Alert Styles */
+.alert {
+    border-radius: 8px;
+    border: none;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    position: relative;
+}
+
+.alert-success {
+    background-color: #d4edda;
+    color: #155724;
+    border-left: 4px solid #28a745;
+}
+
+.alert-error {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-left: 4px solid #dc3545;
+}
+
+.alert-warning {
+    background-color: #fff3cd;
+    color: #856404;
+    border-left: 4px solid #ffc107;
+}
+
+.alert-info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+    border-left: 4px solid #17a2b8;
+}
+
+/* Dark mode alert styles */
+[data-bs-theme="dark"] .alert-success {
+    background-color: #1e4d2b;
+    color: #75b798;
+    border-left-color: #28a745;
+}
+
+[data-bs-theme="dark"] .alert-error {
+    background-color: #4d1e1e;
+    color: #f5c6cb;
+    border-left-color: #dc3545;
+}
+
+[data-bs-theme="dark"] .alert-warning {
+    background-color: #4d3e1e;
+    color: #ffeaa7;
+    border-left-color: #ffc107;
+}
+
+[data-bs-theme="dark"] .alert-info {
+    background-color: #1e4d4d;
+    color: #a8e6cf;
+    border-left-color: #17a2b8;
+}
+
+/* Alert close button */
+.alert .btn-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    opacity: 0.7;
+}
+
+.alert .btn-close:hover {
+    opacity: 1;
+}
+
+/* Flash message animations */
+.alert {
+    animation: slideInDown 0.3s ease-out;
+}
+
+@keyframes slideInDown {
+    from {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Alert dismissal animation */
+.alert.fade-out {
+    animation: slideOutUp 0.3s ease-in forwards;
+}
+
+@keyframes slideOutUp {
+    from {
+        transform: translateY(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+} 

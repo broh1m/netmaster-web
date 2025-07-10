@@ -182,6 +182,10 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128))
+    theme = db.Column(db.String(20), default='auto')
+    language = db.Column(db.String(10), default='en')
+    default_calculation_mode = db.Column(db.String(20), default='host')
+    auto_save_results = db.Column(db.String(20), default='ask')
     notes = db.relationship('Note', backref='author', lazy=True)
 
     def set_password(self, password):
@@ -736,6 +740,37 @@ def add_note_from_calculator():
     except Exception as e:
         app.logger.error(f"Error creating note from calculator: {str(e)}")
         return jsonify({'status': 'error', 'message': 'Failed to create note.'}), 500
+
+@app.route('/update_theme', methods=['POST'])
+@login_required
+def update_theme():
+    try:
+        data = request.get_json()
+        theme = data.get('theme', 'light')
+        
+        # Validate theme value
+        if theme not in ['light', 'dark', 'auto']:
+            return jsonify({'error': 'Invalid theme value'}), 400
+        
+        # Update user's theme preference
+        current_user.theme = theme
+        db.session.commit()
+        
+        return jsonify({'success': True, 'theme': theme})
+        
+    except Exception as e:
+        app.logger.error(f"Error updating theme: {str(e)}")
+        return jsonify({'error': 'Failed to update theme'}), 500
+
+@app.route('/profile')
+@login_required
+def profile():
+    return '<h2>Profile page (coming soon)</h2>'
+
+@app.route('/settings')
+@login_required
+def settings():
+    return '<h2>Settings page (coming soon)</h2>'
 
 if __name__ == '__main__':
     with app.app_context():
