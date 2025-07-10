@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Terms & Policies | NetMaster{% endblock %}
+
+{% block content %}
+<div class="container py-5 animate__animated animate__fadeIn">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="card shadow-lg rounded-4 p-4 mb-5 bg-glass" style="background: var(--color-bg-alt); color: var(--color-text);">
+        <h1 class="fw-bold mb-4 text-gradient text-center">Terms &amp; Policies</h1>
+        <p class="lead mb-4 text-center">Welcome to NetMaster! Please review our terms and policies to understand your rights and responsibilities when using our platform.</p>
+        <hr>
+        <section class="mb-4">
+          <h3 class="fw-semibold mb-2">Terms of Service</h3>
+          <p>By using NetMaster, you agree to use the platform in accordance with all applicable laws and regulations. You may not use the service for unlawful or harmful activities. We reserve the right to suspend or terminate accounts that violate these terms.</p>
+        </section>
+        <section class="mb-4">
+          <h3 class="fw-semibold mb-2">Privacy Policy</h3>
+          <p>Your privacy is important to us. NetMaster only collects the minimum information necessary to provide our services. We do not sell or share your personal data with third parties except as required by law. For more details, please contact our support team.</p>
+        </section>
+        <section class="mb-4">
+          <h3 class="fw-semibold mb-2">User Responsibilities</h3>
+          <p>Users are responsible for maintaining the confidentiality of their account credentials and for all activities that occur under their account. Please notify us immediately of any unauthorized use or security breach.</p>
+        </section>
+        <hr>
+        <div class="text-center text-muted small">Last updated: {{ now().strftime('%B %Y') }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %} 

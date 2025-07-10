@@ -772,6 +772,14 @@ def profile():
 def settings():
     return '<h2>Settings page (coming soon)</h2>'
 
+@app.route('/terms')
+def terms():
+    return render_template('terms.html')
+
+@app.context_processor
+def inject_now():
+    return {'now': datetime.now}
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
