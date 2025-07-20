@@ -42,8 +42,13 @@ class NetworkSizeError(SubnetCalculationError):
     pass
 
 app = Flask(__name__, static_folder='static')
-# Use environment variable for secret key, fallback to generated key
-app.secret_key = os.environ.get('FLASK_SECRET_KEY') or secrets.token_hex(32)
+# Use environment variable for secret key, raise error if not set in production
+if os.environ.get('FLASK_ENV') == 'production':
+    if not os.environ.get('FLASK_SECRET_KEY'):
+        raise RuntimeError('FLASK_SECRET_KEY environment variable must be set in production!')
+    app.secret_key = os.environ['FLASK_SECRET_KEY']
+else:
+    app.secret_key = os.environ.get('FLASK_SECRET_KEY') or 'dev-secret-key'
 
 # Add escapejs filter
 @app.template_filter('escapejs')
@@ -244,6 +249,10 @@ def sanitize_input(text):
     # Remove HTML tags and encode special characters
     return bleach.clean(text, strip=True)
 
+import re
+EMAIL_REGEX = re.compile(r"[^@]+@[^@]+\.[^@]+")
+PASSWORD_REGEX = re.compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$')
+
 @app.route('/login', methods=['GET', 'POST'])
 @limiter.limit("5 per minute")
 def login():
@@ -278,14 +287,14 @@ def register():
                 flash('Username must be between 3 and 80 characters long', 'error')
                 return redirect(url_for('register'))
             
-            # Validate email
-            if not email or '@' not in email or '.' not in email:
+            # Validate email with regex
+            if not email or not EMAIL_REGEX.match(email):
                 flash('Please enter a valid email address', 'error')
                 return redirect(url_for('register'))
             
-            # Validate password
-            if not password or len(password) < 8:
-                flash('Password must be at least 8 characters long', 'error')
+            # Validate password complexity
+            if not password or not PASSWORD_REGEX.match(password):
+                flash('Password must be at least 8 characters long and include at least one uppercase letter, one lowercase letter, and one number.', 'error')
                 return redirect(url_for('register'))
             
             # Check if username exists
