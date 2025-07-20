@@ -18,6 +18,7 @@ import bleach
 from functools import wraps
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_migrate import Migrate
 
 # Custom exceptions for subnet calculation
 class SubnetCalculationError(Exception):
@@ -57,6 +58,7 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
 app.config['WTF_CSRF_ENABLED'] = True
 app.config['WTF_CSRF_TIME_LIMIT'] = 3600  # 1 hour
+app.config['SESSION_COOKIE_SAMESITE'] = "Lax"
 
 # Initialize security extensions
 csrf = CSRFProtect(app)
@@ -82,6 +84,7 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
 }
 
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 
 # Create database tables
 with app.app_context():
