@@ -27,6 +27,77 @@
   --logo-gradient: linear-gradient(90deg, #4a90e2 0%, #764ba2 100%);
 }
 
+/* Development Banner - Theme Adaptive */
+.development-banner {
+  background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+  border-bottom: 2px solid #ffc107 !important;
+  color: #856404;
+  transition: background var(--transition), color var(--transition);
+}
+
+[data-bs-theme="dark"] .development-banner {
+  background: linear-gradient(135deg, #2d1b0e 0%, #3d2b1a 100%);
+  border-bottom: 2px solid #ffc107 !important;
+  color: #ffd54f;
+}
+
+.development-banner .btn-close {
+  filter: invert(0);
+  transition: filter var(--transition);
+}
+
+[data-bs-theme="dark"] .development-banner .btn-close {
+  filter: invert(1);
+}
+
+.development-banner strong {
+  color: inherit;
+}
+
+.development-banner .bi-exclamation-triangle-fill {
+  color: #ffc107;
+}
+
+/* Privacy Policy Page - Theme Adaptive */
+.privacy-policy-card {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  transition: background var(--transition), border var(--transition);
+}
+
+.privacy-policy-card h1,
+.privacy-policy-card h4 {
+  color: var(--color-text);
+  transition: color var(--transition);
+}
+
+.privacy-policy-card p,
+.privacy-policy-card li {
+  color: var(--color-text);
+  transition: color var(--transition);
+}
+
+.privacy-policy-card strong {
+  color: var(--color-text);
+  transition: color var(--transition);
+}
+
+.privacy-link {
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+
+.privacy-link:hover {
+  color: var(--color-primary-dark);
+  text-decoration: underline;
+}
+
+.privacy-footer {
+  color: var(--color-muted);
+  transition: color var(--transition);
+}
+
 body {
   background: var(--color-bg);
   color: var(--color-text);
