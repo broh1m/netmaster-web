@@ -236,6 +236,10 @@ body {
   color: var(--color-muted);
     font-size: 1rem;
   box-shadow: none;
+  margin-top: 2rem !important;
+  padding-top: 0.5rem !important;
+  padding-bottom: 0.5rem !important;
+  font-size: 0.95rem !important;
 }
 .footer-minimal .logo-text {
     font-size: 1.2rem;
@@ -274,7 +278,7 @@ body {
   background: radial-gradient(circle at 30% 20%, var(--color-primary) 0%, transparent 70%),
               radial-gradient(circle at 80% 80%, #764ba2 0%, transparent 70%);
   opacity: 0.08;
-  z-index: 0;
+  z-index: auto;
   pointer-events: none;
 }
 [data-bs-theme="dark"] .quick-start-bg {
@@ -282,11 +286,11 @@ body {
 }
 .quick-start-card h2 {
     position: relative;
-    z-index: 1;
+    z-index: auto;
 }
 .steps-container {
     position: relative;
-    z-index: 1;
+    z-index: auto;
 }
 .step-card {
   background: var(--color-card);
@@ -948,4 +952,22 @@ html, body, .how-section, .demo-section, .cta-section, .footer-minimal {
 [data-bs-theme="dark"] .demo-snippet-card {
   background: #232837 !important;
   color: #f3f6fa !important;
+} 
+
+.dropdown-menu {
+  z-index: 2000 !important;
+  position: absolute !important;
+} 
+
+.card {
+  z-index: auto !important;
+}
+.calculator-card {
+  z-index: auto !important;
+}
+.results-section {
+  z-index: auto !important;
+}
+.note-card {
+  z-index: auto !important;
 } 

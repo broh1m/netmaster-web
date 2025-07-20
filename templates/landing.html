@@ -13,7 +13,7 @@
 <section class="saas-hero container text-center mb-5">
     <h1 class="display-2 fw-bold mb-3 text-gradient">Subnetting, Simplified.</h1>
     <p class="lead mb-4">NetMaster is the modern SaaS platform for network professionals. Instantly calculate, visualize, and document your subnets and VLANs with a single click.</p>
-    <p class="hero-desc mb-4">Whether you're a seasoned network engineer or just starting out, NetMaster makes subnetting effortless. Instantly see visual breakdowns of your networks, plan VLANs, and export results for documentation or sharing. No sign-up required—just enter your network and get started with powerful, intuitive tools designed for clarity and speed.</p>
+    <p class="hero-desc mb-4">Whether you're a seasoned network engineer or just starting out, NetMaster makes subnetting effortless. Instantly see visual breakdowns of your networks, plan VLANs, and export results for documentation or sharing. <strong>Registration is required to create and view notes or save calculation results.</strong></p>
     <div class="d-flex justify-content-center gap-3 mb-4 flex-wrap">
         <a href="{{ url_for('home') }}" class="btn btn-primary btn-lg px-4 animate__animated animate__pulse animate__infinite">
             <i class="bi bi-calculator me-2"></i>Start Calculating
@@ -23,7 +23,7 @@
         </a>
     </div>
     <div class="mt-3 text-muted small">
-        <i class="bi bi-check-circle text-primary me-1"></i>No sign-up required &mdash; try it instantly!
+        <i class="bi bi-lock text-primary me-1"></i>Account required for notes and saved results.
     </div>
 </section>
 
@@ -60,25 +60,14 @@
     </div>
 </section>
 
-<!-- Live Demo/Preview Section -->
+<!-- Redesigned Subnetting Demo Animation Section -->
 <section class="demo-section container py-5 mb-5">
   <div class="row justify-content-center">
     <div class="col-lg-10">
       <div class="card shadow-lg p-4 mb-4 demo-snippet-card" style="border-radius:1.5rem; background: var(--color-bg-alt); color: var(--color-text);">
-        <h3 class="fw-bold mb-3">Instant Preview</h3>
-        <p class="mb-4">See how NetMaster instantly calculates and visualizes your subnets. Try it live or view a sample output below.</p>
-        <pre class="demo-snippet p-3 rounded mb-0"><code>Input: 192.168.1.0/24
-Mode: Host-based
-
-Subnet 1: 192.168.1.0/26
-Subnet 2: 192.168.1.64/26
-Subnet 3: 192.168.1.128/26
-Subnet 4: 192.168.1.192/26
-
-Export: <span class="text-success">CSV</span></code></pre>
-      </div>
-      <div class="d-flex flex-column align-items-center justify-content-center gap-3">
-        <div class="mb-2 w-100 d-flex flex-wrap align-items-center justify-content-center" id="subnet-sim-scenario-controls">
+        <h3 class="fw-bold mb-2 text-gradient">Subnetting Demo</h3>
+        <p class="mb-4">Visualize how a network is split into subnets step by step.</p>
+        <div class="d-flex flex-wrap align-items-center gap-3 mb-3" id="subnet-sim-scenario-controls">
           <label for="subnet-sim-scenario" class="form-label mb-0 me-2">Scenario:</label>
           <select id="subnet-sim-scenario" class="form-select w-auto">
             <option value="24-26">/24 → 4 × /26</option>
@@ -90,18 +79,27 @@ Export: <span class="text-success">CSV</span></code></pre>
             <input type="number" id="subnet-sim-custom-count" class="form-control w-auto" min="2" max="32" placeholder="# Subnets">
           </div>
         </div>
-        <div class="subnet-simulation-card rounded-4 shadow-lg p-3 w-100 bg-dark bg-opacity-75 d-flex align-items-center justify-content-center mb-2" style="max-width:600px;">
+        <div class="subnet-simulation-card rounded-4 shadow-lg p-3 w-100 bg-dark bg-opacity-75 d-flex align-items-center justify-content-center mb-3" style="max-width:600px; margin:auto;">
           <canvas id="subnet-simulation-canvas" width="520" height="260"></canvas>
         </div>
-        <div class="d-flex justify-content-center mt-2" id="subnet-sim-controls">
-          <button class="btn btn-outline-primary me-2" id="subnet-sim-back" style="min-width:90px;display:none;">Back</button>
+        <div class="progress mb-3" style="height: 1.25rem;">
+          <div id="subnet-sim-progress" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+        </div>
+        <div id="subnet-sim-step-info" class="mb-3">
+          <div class="fw-semibold" id="subnet-sim-step-title"></div>
+          <div class="text-muted" id="subnet-sim-step-explanation"></div>
+        </div>
+        <div class="d-flex justify-content-center gap-2" id="subnet-sim-controls">
+          <button class="btn btn-outline-primary" id="subnet-sim-back" style="min-width:90px;display:none;">Back</button>
           <button class="btn btn-primary" id="subnet-sim-next" style="min-width:90px;">Next</button>
-          <button class="btn btn-success ms-2" id="subnet-sim-replay" style="min-width:90px;display:none;">Replay</button>
+          <button class="btn btn-success" id="subnet-sim-replay" style="min-width:90px;display:none;">Replay</button>
+          <button class="btn btn-outline-danger" id="subnet-sim-reset" style="min-width:90px;">Reset</button>
         </div>
       </div>
     </div>
   </div>
 </section>
+<!-- End Redesigned Subnetting Demo Animation Section -->
 
 <!-- Key Features Highlights -->
 <section class="features-section py-5">
@@ -150,9 +148,9 @@ Export: <span class="text-success">CSV</span></code></pre>
       </div>
       <div class="col-md-4 col-lg-3">
         <div class="feature-card h-100 p-4 text-center rounded-3 shadow-sm">
-          <div class="feature-icon mb-3 fs-2 text-gradient"><i class="bi bi-person-badge"></i></div>
-          <h5 class="fw-semibold mb-2">No Sign-Up Needed</h5>
-          <p class="mb-0">Use all features instantly, no registration required.</p>
+          <div class="feature-icon mb-3 fs-2 text-gradient"><i class="bi bi-lock"></i></div>
+          <h5 class="fw-semibold mb-2">Account Required</h5>
+          <p class="mb-0">You must create an account and log in to create and view notes or calculation results.</p>
         </div>
       </div>
     </div>
@@ -203,7 +201,7 @@ Export: <span class="text-success">CSV</span></code></pre>
     <div class="row justify-content-center">
       <div class="col-lg-8 text-center">
         <h2 class="fw-bold mb-3">Why NetMaster?</h2>
-        <p class="lead mb-0">NetMaster combines speed, accuracy, and beautiful visualization to make subnetting effortless for everyone. Whether you’re a student, a pro, or just subnet-curious, you’ll get instant results and clear insights—no sign-up, no hassle.</p>
+        <p class="lead mb-0">NetMaster combines speed, accuracy, and beautiful visualization to make subnetting effortless for everyone. Whether you’re a student, a pro, or just subnet-curious, you’ll get instant results and clear insights—<strong>registration is required for notes and saved results</strong>.</p>
       </div>
     </div>
   </div>
@@ -253,7 +251,7 @@ Export: <span class="text-success">CSV</span></code></pre>
             </h2>
             <div id="faqCollapse3" class="accordion-collapse collapse" aria-labelledby="faq3" data-bs-parent="#faqAccordion">
               <div class="accordion-body">
-                No registration is required. You can use all features instantly and for free.
+                <strong>Registration is required to create and view notes or save calculation results.</strong> You can still use the basic subnet calculator instantly without an account.
               </div>
             </div>
           </div>

@@ -299,7 +299,7 @@ class SubnetSimulation {
     }
 }
 
-// Redesigned Subnetting Demo Animation with animated transitions
+// --- NEW SUBNETTING DEMO ANIMATION LOGIC ---
 (function () {
   const canvas = document.getElementById('subnet-simulation-canvas');
   if (!canvas) return;
@@ -307,397 +307,276 @@ class SubnetSimulation {
   let width = canvas.width;
   let height = canvas.height;
 
-  // Theme colors
-  function getColors() {
-    const theme = document.documentElement.getAttribute('data-bs-theme');
-    if (theme === 'dark') {
-      return {
-        bg: '#181c24',
-        grid: 'rgba(120,110,180,0.13)',
-        card: '#232837',
-        text: '#fff',
-        accent: '#4a90e2',
-        neon: '#a259ff',
-        play: '#4a90e2',
-        shadow: 'rgba(110,198,255,0.18)'
-      };
-    } else {
-      return {
-        bg: '#f8fafd',
-        grid: 'rgba(76,110,245,0.08)',
-        card: '#fff',
-        text: '#232837',
-        accent: '#4a90e2',
-        neon: '#764ba2',
-        play: '#4a90e2',
-        shadow: 'rgba(76,110,245,0.13)'
-      };
-    }
-  }
-
   // Animation state
   let step = 0;
   let running = false;
-  let animTimeout = null;
   let animFrame = 0;
-  let animating = false;
-  let splitProgress = 0; // 0 to 1 for block splitting
-  let highlightPulse = 0; // 0 to 1 for glowing effect
+  let animTimeout = null;
+  let scenario = { network: '192.168.1.0/24', count: 4 };
+  let subnets = [];
+  let newMask = 26;
+  let subnetSize = 64;
+
+  // Steps for the new animation
   const steps = [
     {
-      title: 'Step 1: Start with the /24 network',
-      explain: '192.168.1.0/24',
-      subnets: [{ base: '192.168.1.0', mask: 24, highlight: true }]
+      title: 'Step 1: Start with the original network',
+      explain: () => `Original network: ${scenario.network}`,
+      draw: function() {
+        drawBlock(0, 0, width, height, '#4a90e2', scenario.network);
+      }
     },
     {
-      title: 'Step 2: Calculate subnet mask for 4 subnets',
-      explain: 'New mask: /26 (255.255.255.192)',
-      subnets: [
-        { base: '192.168.1.0', mask: 26, highlight: true },
-        { base: '192.168.1.64', mask: 26 },
-        { base: '192.168.1.128', mask: 26 },
-        { base: '192.168.1.192', mask: 26 }
-      ]
+      title: 'Step 2: Determine number of subnets',
+      explain: () => `You need ${scenario.count} subnets.`,
+      draw: function() {
+        drawBlock(0, 0, width, height, '#4a90e2', scenario.network);
+        drawOverlay(`Subnets needed: ${scenario.count}`);
+      }
     },
     {
-      title: 'Step 3: Calculate ranges for each subnet',
-      explain: 'Each /26: 62 hosts, 64 IPs',
-      subnets: [
-        { base: '192.168.1.0', mask: 26, range: '192.168.1.1 - 192.168.1.62', broadcast: '192.168.1.63', highlight: true },
-        { base: '192.168.1.64', mask: 26, range: '192.168.1.65 - 192.168.1.126', broadcast: '192.168.1.127' },
-        { base: '192.168.1.128', mask: 26, range: '192.168.1.129 - 192.168.1.190', broadcast: '192.168.1.191' },
-        { base: '192.168.1.192', mask: 26, range: '192.168.1.193 - 192.168.1.254', broadcast: '192.168.1.255' }
-      ]
+      title: 'Step 3: Calculate new subnet mask',
+      explain: () => `New subnet mask: /${newMask} (${subnetMask(newMask)})`,
+      draw: function() {
+        drawBlock(0, 0, width, height, '#4a90e2', scenario.network);
+        drawOverlay(`New mask: /${newMask}`);
+      }
     },
     {
-      title: 'Step 4: All subnets visualized',
-      explain: '',
-      subnets: [
-        { base: '192.168.1.0', mask: 26, range: '192.168.1.1 - 192.168.1.62', broadcast: '192.168.1.63' },
-        { base: '192.168.1.64', mask: 26, range: '192.168.1.65 - 192.168.1.126', broadcast: '192.168.1.127' },
-        { base: '192.168.1.128', mask: 26, range: '192.168.1.129 - 192.168.1.190', broadcast: '192.168.1.191' },
-        { base: '192.168.1.192', mask: 26, range: '192.168.1.193 - 192.168.1.254', broadcast: '192.168.1.255' }
-      ]
-    }
-  ];
-
-  // Color palette for subnets
-  const subnetColors = [
-    '#4a90e2', '#764ba2', '#43e8d8', '#ffb347', '#e94e77', '#6ec6ff', '#b388ff', '#ff7c43'
-  ];
-
-  // Draw grid background
-  function drawGrid(colors) {
-    ctx.save();
-    ctx.strokeStyle = colors.grid;
-    ctx.lineWidth = 1;
-    const gridSize = 20;
-    for (let x = 0; x < width; x += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, height);
-      ctx.stroke();
-    }
-    for (let y = 0; y < height; y += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  // Draw neon border at bottom
-  function drawNeonBorder(colors) {
-    ctx.save();
-    const grad = ctx.createLinearGradient(0, height - 8, width, height);
-    grad.addColorStop(0, colors.neon);
-    grad.addColorStop(1, colors.accent);
-    ctx.shadowColor = colors.neon;
-    ctx.shadowBlur = 16;
-    ctx.fillStyle = grad;
-    ctx.fillRect(12, height - 12, width - 24, 6);
-    ctx.restore();
-  }
-
-  // Draw play icon and title
-  function drawTitle(colors) {
-    ctx.save();
-    ctx.font = 'bold 2.2rem Inter, Arial, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = colors.accent;
-    ctx.shadowColor = colors.shadow;
-    ctx.shadowBlur = 8;
-    // Play icon
-    ctx.beginPath();
-    ctx.arc(54, 54, 32, 0, 2 * Math.PI);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(54 - 12, 54 - 18);
-    ctx.lineTo(54 + 18, 54);
-    ctx.lineTo(54 - 12, 54 + 18);
-    ctx.closePath();
-    ctx.fillStyle = '#fff';
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    // Title
-    ctx.fillStyle = colors.accent;
-    ctx.fillText('Subnetting Demo', 100, 66);
-    ctx.restore();
-  }
-
-  // Draw central message
-  function drawCenterMessage(colors, msg) {
-    ctx.save();
-    ctx.font = 'bold 1.2rem Inter, Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = colors.text;
-    ctx.shadowColor = colors.neon;
-    ctx.shadowBlur = 8;
-    ctx.fillText(msg, width / 2, height / 2);
-    ctx.shadowBlur = 0;
-    ctx.restore();
-  }
-
-  // Draw subnet blocks and info with animation
-  function drawSubnetsAnimated(colors, stepObj) {
-    const n = stepObj.subnets.length;
-    let blockW = (width - 80) / n;
-    let y0 = 110, y1 = height - 60;
-    // Animate splitting for step 1 to 2
-    if (step === 1 && animating) {
-      blockW = (width - 80) / 4;
-      for (let i = 0; i < 4; i++) {
-        ctx.save();
-        // Interpolate x positions
-        let t = splitProgress;
-        let xStart = width / 2 - (blockW * 2);
-        let x = xStart + i * blockW + (i - 1.5) * blockW * (1 - t);
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = subnetColors[i % subnetColors.length];
-        ctx.strokeStyle = colors.neon;
-        ctx.lineWidth = i === 0 ? 4 : 2;
-        ctx.beginPath();
-        ctx.moveTo(x, y0);
-        ctx.lineTo(x + blockW, y0);
-        ctx.lineTo(x + blockW, y1);
-        ctx.lineTo(x, y1);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        // Highlight pulse
-        if (i === 0) {
-          ctx.save();
-          ctx.shadowBlur = 0;
-          ctx.restore();
+      title: 'Step 4: Split the network into subnets',
+      explain: () => `The network is split into ${scenario.count} subnets of /${newMask}.`,
+      draw: function() {
+        for (let i = 0; i < scenario.count; i++) {
+          drawSubnetBlock(i, scenario.count, subnets[i]?.network, '#43e8d8');
         }
-        // Overlay behind text
-        ctx.save();
-        ctx.globalAlpha = 0.18;
-        ctx.fillStyle = '#000';
-        ctx.fillRect(x, y1 - 48, blockW, 48);
-        ctx.restore();
-        // Text (smaller, no shadow)
-        ctx.globalAlpha = 1;
-        ctx.font = '600 1rem Inter, Arial, sans-serif';
-        ctx.fillStyle = '#fff';
-        ctx.textAlign = 'center';
-        ctx.fillText(`192.168.1.${i * 64}/26`, x + blockW / 2, y1 - 18);
-        ctx.restore();
       }
-      return;
+    },
+    {
+      title: 'Step 5: Label each subnet',
+      explain: () => `Each subnet has its own network address and range.`,
+      draw: function() {
+        for (let i = 0; i < scenario.count; i++) {
+          drawSubnetBlock(i, scenario.count, subnets[i]?.network, '#43e8d8');
+          drawSubnetLabel(i, scenario.count, subnets[i]);
+        }
+      }
+    },
+    {
+      title: 'Step 6: Highlight usable host ranges',
+      explain: () => `Usable hosts: ${subnetSize - 2} per subnet.`,
+      draw: function() {
+        for (let i = 0; i < scenario.count; i++) {
+          drawSubnetBlock(i, scenario.count, subnets[i]?.network, '#43e8d8');
+          drawSubnetLabel(i, scenario.count, subnets[i]);
+          drawHostRange(i, scenario.count, subnets[i]);
+        }
+      }
+    },
+    {
+      title: 'Step 7: Subnetting complete!',
+      explain: () => `All subnets are ready for use.`,
+      draw: function() {
+        for (let i = 0; i < scenario.count; i++) {
+          drawSubnetBlock(i, scenario.count, subnets[i]?.network, '#43e8d8');
+          drawSubnetLabel(i, scenario.count, subnets[i]);
+          drawHostRange(i, scenario.count, subnets[i]);
+        }
+        drawOverlay('Subnetting complete!');
+      }
     }
-    // Animate merging for step 0
-    if (step === 0 && animating) {
-      blockW = (width - 80) / 4;
-      let t = 1 - splitProgress;
-      let xStart = width / 2 - (blockW * 2);
-      ctx.save();
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = subnetColors[0];
-      ctx.strokeStyle = colors.neon;
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(xStart + blockW * t, y0);
-      ctx.lineTo(xStart + blockW * (4 - t), y0);
-      ctx.lineTo(xStart + blockW * (4 - t), y1);
-      ctx.lineTo(xStart + blockW * t, y1);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      // Highlight pulse
-      ctx.save();
-      ctx.shadowBlur = 0;
-      ctx.restore();
-      // Overlay behind text
-      ctx.save();
-      ctx.globalAlpha = 0.18;
-      ctx.fillStyle = '#000';
-      ctx.fillRect(xStart + blockW * t, y1 - 48, blockW * (4 - 2 * t), 48);
-      ctx.restore();
-      // Text (smaller, no shadow)
-      ctx.globalAlpha = 1;
-      ctx.font = '600 1.1rem Inter, Arial, sans-serif';
-      ctx.fillStyle = '#fff';
-      ctx.textAlign = 'center';
-      ctx.fillText('192.168.1.0/24', width / 2, y1 - 18);
-      ctx.restore();
-      return;
-    }
-    // Normal drawing for other steps
-    for (let i = 0; i < n; i++) {
-      const subnet = stepObj.subnets[i];
-      ctx.save();
-      ctx.globalAlpha = subnet.highlight ? 1 : 0.85;
-      ctx.fillStyle = subnetColors[i % subnetColors.length];
-      ctx.strokeStyle = subnet.highlight ? colors.neon : colors.accent;
-      ctx.lineWidth = subnet.highlight ? 4 : 2;
-      ctx.beginPath();
-      ctx.moveTo(40 + i * blockW, y0);
-      ctx.lineTo(40 + (i + 1) * blockW, y0);
-      ctx.lineTo(40 + (i + 1) * blockW, y1);
-      ctx.lineTo(40 + i * blockW, y1);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      // Highlight pulse
-      if (subnet.highlight) {
-        ctx.save();
-        ctx.shadowBlur = 0;
-        ctx.restore();
-      }
-      // Overlay behind text
-      ctx.save();
-      ctx.globalAlpha = 0.18;
-      ctx.fillStyle = '#000';
-      ctx.fillRect(40 + i * blockW, y1 - 48, blockW, 48);
-      ctx.restore();
-      // Text (smaller, no shadow)
-      ctx.globalAlpha = 1;
-      ctx.font = '600 0.95rem Inter, Arial, sans-serif';
-      ctx.fillStyle = '#fff';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${subnet.base}/${subnet.mask}`, 40 + (i + 0.5) * blockW, y1 - 32);
-      if (subnet.range) {
-        ctx.font = '500 0.9rem Inter, Arial, sans-serif';
-        ctx.fillStyle = '#ffe082';
-        ctx.fillText(subnet.range, 40 + (i + 0.5) * blockW, y1 - 18);
-      }
-      if (subnet.broadcast) {
-        ctx.font = '500 0.85rem Inter, Arial, sans-serif';
-        ctx.fillStyle = '#b388ff';
-        ctx.fillText('Broadcast: ' + subnet.broadcast, 40 + (i + 0.5) * blockW, y1 - 6);
-      }
-      ctx.restore();
+  ];
+
+  // Utility: Get block color (fixed to previous color)
+  function getBlockColor() {
+    const theme = document.documentElement.getAttribute('data-bs-theme');
+    if (theme === 'dark') {
+      return '#43e8d8'; // light teal for dark mode
+    } else {
+      return '#009688'; // deeper teal for light mode
     }
   }
 
-  // Draw step title and explanation
-  function drawStepInfo(colors, stepObj) {
+  // Utility: Draw a large block
+  function drawBlock(x, y, w, h, color, label) {
     ctx.save();
-    ctx.font = '600 1.05rem Inter, Arial, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = colors.accent;
-    ctx.fillText(stepObj.title, 32, 100);
-    ctx.font = '500 0.95rem Inter, Arial, sans-serif';
-    ctx.fillStyle = colors.text;
-    ctx.fillText(stepObj.explain, 32, 122);
+    ctx.fillStyle = getBlockColor();
+    ctx.strokeStyle = '#232837';
+    ctx.lineWidth = 4;
+    ctx.fillRect(x + 20, y + 40, w - 40, h - 80);
+    ctx.strokeRect(x + 20, y + 40, w - 40, h - 80);
+    ctx.font = 'bold 1.2rem Inter, Arial, sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, w / 2, h / 2);
     ctx.restore();
+  }
+
+  // Utility: Draw overlay text
+  function drawOverlay(text) {
+    ctx.save();
+    ctx.globalAlpha = 0.92;
+    ctx.fillStyle = '#232837';
+    ctx.fillRect(0, height - 60, width, 60);
+    ctx.font = 'bold 1.1rem Inter, Arial, sans-serif';
+    ctx.fillStyle = '#ffe082';
+    ctx.textAlign = 'center';
+    ctx.fillText(text, width / 2, height - 25);
+    if (scenario.warning) {
+      ctx.font = 'bold 0.9rem Inter, Arial, sans-serif';
+      ctx.fillStyle = '#ff5252';
+      ctx.fillText(scenario.warning, width / 2, height - 8);
+    }
+    ctx.restore();
+  }
+
+  // Utility: Draw a subnet block
+  function drawSubnetBlock(i, total, label, color) {
+    const blockW = (width - 60) / total;
+    ctx.save();
+    ctx.fillStyle = getBlockColor();
+    ctx.strokeStyle = '#232837';
+    ctx.lineWidth = 3;
+    ctx.fillRect(30 + i * blockW, 60, blockW - 10, height - 120);
+    ctx.strokeRect(30 + i * blockW, 60, blockW - 10, height - 120);
+    ctx.font = 'bold 1rem Inter, Arial, sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, 30 + i * blockW + (blockW - 10) / 2, height / 2);
+    ctx.restore();
+  }
+
+  // Utility: Draw subnet label details
+  function drawSubnetLabel(i, total, subnet) {
+    if (!subnet) return;
+    const blockW = (width - 60) / total;
+    const centerX = 30 + i * blockW + (blockW - 10) / 2;
+    // Network/mask label near the top
+    let y = height / 2 - 18;
+    ctx.save();
+    ctx.font = 'bold 0.90rem Inter, Arial, sans-serif';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    let label = `${subnet.network}/${subnet.mask}`;
+    if (ctx.measureText(label).width > blockW - 16) {
+      while (label.length > 0 && ctx.measureText(label + '...').width > blockW - 16) {
+        label = label.slice(0, -1);
+      }
+      label += '...';
+    }
+    ctx.fillText(label, centerX, y);
+    // Range label near the bottom of the block
+    ctx.font = 'bold 0.80rem Inter, Arial, sans-serif';
+    ctx.fillStyle = '#ffe082';
+    let range = `Range: ${subnet.firstUsable} - ${subnet.lastUsable}`;
+    if (ctx.measureText(range).width > blockW - 16) {
+      while (range.length > 0 && ctx.measureText(range + '...').width > blockW - 16) {
+        range = range.slice(0, -1);
+      }
+      range += '...';
+    }
+    // Place range label 28px above the bottom of the block
+    let rangeY = height - 80;
+    ctx.fillText(range, centerX, rangeY);
+    ctx.restore();
+  }
+
+  // Utility: Highlight usable host range
+  function drawHostRange(i, total, subnet) {
+    if (!subnet) return;
+    const blockW = (width - 60) / total;
+    if (blockW < 140) return; // Don't draw if too narrow
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = '#00e676';
+    ctx.fillRect(30 + i * blockW, height / 2 + 54, blockW - 10, 24);
+    ctx.globalAlpha = 1;
+    ctx.font = '0.80rem Inter, Arial, sans-serif';
+    ctx.fillStyle = '#00e676';
+    ctx.textAlign = 'center';
+    ctx.fillText(`Usable: ${subnet.firstUsable} - ${subnet.lastUsable}`, 30 + i * blockW + (blockW - 10) / 2, height / 2 + 70);
+    ctx.restore();
+  }
+
+  // Utility: Subnet mask from mask bits
+  function subnetMask(mask) {
+    let maskArr = [];
+    for (let i = 0; i < 4; i++) {
+      let bits = Math.min(8, mask);
+      maskArr.push(256 - Math.pow(2, 8 - bits));
+      mask -= bits;
+    }
+    return maskArr.join('.');
+  }
+
+  // Utility: IP math
+  function ipToInt(ip) {
+    return ip.split('.').reduce((acc, oct) => (acc << 8) + parseInt(oct), 0);
+  }
+  function intToIp(int) {
+    return [
+      (int >>> 24) & 255,
+      (int >>> 16) & 255,
+      (int >>> 8) & 255,
+      int & 255
+    ].join('.');
+  }
+
+  // Calculate subnets for scenario
+  function calculateSubnets() {
+    let [base, mask] = scenario.network.split('/');
+    mask = parseInt(mask);
+    if (!base || isNaN(mask) || mask < 1 || mask > 30 || !scenario.count || scenario.count < 1) {
+      subnets = [];
+      newMask = mask || 24;
+      subnetSize = 0;
+      return;
+    }
+    // Find the smallest power of two >= count
+    let neededSubnets = Math.pow(2, Math.ceil(Math.log2(scenario.count)));
+    newMask = mask + Math.ceil(Math.log2(neededSubnets));
+    subnetSize = Math.pow(2, 32 - newMask);
+    let baseInt = ipToInt(base);
+    subnets = [];
+    let warning = null;
+    if (scenario.count !== neededSubnets) {
+      warning = `Note: Only ${neededSubnets} subnets can be created. Showing first ${scenario.count}.`;
+    }
+    for (let i = 0; i < scenario.count; i++) {
+      let netInt = baseInt + i * subnetSize;
+      let bcastInt = netInt + subnetSize - 1;
+      subnets.push({
+        network: intToIp(netInt),
+        mask: newMask,
+        firstUsable: intToIp(netInt + 1),
+        lastUsable: intToIp(bcastInt - 1),
+        broadcast: intToIp(bcastInt)
+      });
+    }
+    // Attach warning to the scenario for overlay
+    scenario.warning = warning;
   }
 
   // Main draw
   function draw() {
-    const colors = getColors();
     ctx.clearRect(0, 0, width, height);
-    // Card background
     ctx.save();
-    ctx.fillStyle = colors.card;
+    ctx.fillStyle = '#232837';
     ctx.globalAlpha = 0.98;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(width, 0);
-    ctx.lineTo(width, height);
-    ctx.lineTo(0, height);
-    ctx.closePath();
-    ctx.fill();
+    ctx.fillRect(0, 0, width, height);
     ctx.globalAlpha = 1;
     ctx.restore();
-    // Grid
-    drawGrid(colors);
-    // Neon border
-    drawNeonBorder(colors);
-    // Title
-    drawTitle(colors);
-    // Step
-    if (!running) {
-      drawCenterMessage(colors, 'Click anywhere to start the animation');
-    } else {
-      drawStepInfo(colors, steps[step]);
-      drawSubnetsAnimated(colors, steps[step]);
+    if (steps[step] && typeof steps[step].draw === 'function') {
+      steps[step].draw();
     }
   }
 
-  // Animation loop
-  function animate() {
-    if (!running && !animating) return;
-    animFrame++;
-    highlightPulse = (animFrame % 60) / 60;
-    if (animating) {
-      // Animate split/merge progress
-      if (step === 1 && splitProgress < 1) {
-        splitProgress += 0.04;
-        if (splitProgress >= 1) {
-          splitProgress = 1;
-          animating = false;
-          // Continue to next step after a pause
-          animTimeout = setTimeout(nextStep, 1200);
-        }
-      } else if (step === 0 && splitProgress > 0) {
-        splitProgress -= 0.04;
-        if (splitProgress <= 0) {
-          splitProgress = 0;
-          animating = false;
-        }
-      }
-    }
+  // Step navigation
+  function goToStep(newStep) {
+    step = Math.max(0, Math.min(steps.length - 1, newStep));
     draw();
-    requestAnimationFrame(animate);
-  }
-
-  // Step animation logic
-  function nextStep() {
-    if (!running) return;
-    if (step === 0) {
-      animating = true;
-      splitProgress = 0;
-      animate();
-    } else if (step === 1) {
-      animating = true;
-      splitProgress = 0;
-      animate();
-    } else if (step < steps.length - 1) {
-      step++;
-      draw();
-      animTimeout = setTimeout(nextStep, 1800);
-      return;
-    } else {
-      // Pause at last step
-      animTimeout = setTimeout(() => {
-        running = false;
-        step = 0;
-        draw();
-      }, 2600);
-      return;
-    }
-    // Advance step after animation
-    if (!animating) {
-      step++;
-      draw();
-      animTimeout = setTimeout(nextStep, 1800);
-    } else {
-      // Wait for animation to finish
-      // nextStep will be called after animation
-    }
+    updateProgressBar();
+    updateStepInfo();
+    updateControls && updateControls();
   }
 
   // Responsive
@@ -708,98 +587,103 @@ class SubnetSimulation {
   }
   window.addEventListener('resize', resize);
 
-  // Theme observer
-  const observer = new MutationObserver(draw);
-  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
-
-  // Click to start
-  canvas.addEventListener('click', () => {
-    if (!running) {
-      running = true;
-      step = 0;
-      animFrame = 0;
-      splitProgress = 0;
-      animating = false;
-      draw();
-      animTimeout = setTimeout(nextStep, 1200);
-    }
-  });
-
-  // Tooltip logic
-  let hoveredSubnetIdx = null;
-  let mouseX = 0, mouseY = 0;
-  let tooltipEl = null;
-
-  function ensureTooltip() {
-    if (!tooltipEl) {
-      tooltipEl = document.createElement('div');
-      tooltipEl.id = 'subnet-tooltip';
-      tooltipEl.style.position = 'fixed';
-      tooltipEl.style.pointerEvents = 'none';
-      tooltipEl.style.zIndex = 10000;
-      tooltipEl.style.background = 'rgba(24,28,36,0.98)';
-      tooltipEl.style.color = '#fff';
-      tooltipEl.style.padding = '0.7em 1.1em';
-      tooltipEl.style.borderRadius = '0.7em';
-      tooltipEl.style.boxShadow = '0 4px 24px 0 rgba(110,198,255,0.18)';
-      tooltipEl.style.fontSize = '1rem';
-      tooltipEl.style.fontFamily = 'Inter, Arial, sans-serif';
-      tooltipEl.style.display = 'none';
-      tooltipEl.style.transition = 'opacity 0.18s';
-      document.body.appendChild(tooltipEl);
-    }
-  }
-
-  function showTooltip(subnet, x, y) {
-    ensureTooltip();
-    let html = `<strong>${subnet.base}/${subnet.mask}</strong><br>`;
-    if (subnet.range) html += `Range: ${subnet.range}<br>`;
-    if (subnet.broadcast) html += `Broadcast: ${subnet.broadcast}<br>`;
-    html += `Hosts: 62`;
-    tooltipEl.innerHTML = html;
-    tooltipEl.style.left = (x + 18) + 'px';
-    tooltipEl.style.top = (y + 18) + 'px';
-    tooltipEl.style.display = 'block';
-    tooltipEl.style.opacity = 1;
-  }
-
-  function hideTooltip() {
-    if (tooltipEl) {
-      tooltipEl.style.display = 'none';
-      tooltipEl.style.opacity = 0;
-    }
-  }
-
-  canvas.addEventListener('mousemove', (e) => {
-    mouseX = e.clientX;
-    mouseY = e.clientY;
-    if (!running) { hideTooltip(); hoveredSubnetIdx = null; return; }
-    // Detect if mouse is over a block
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    let found = false;
-    const stepObj = steps[step];
-    const n = stepObj.subnets.length;
-    let blockW = (canvas.width - 80) / n;
-    let y0 = 110, y1 = canvas.height - 60;
-    for (let i = 0; i < n; i++) {
-      let bx0 = 40 + i * blockW, bx1 = 40 + (i + 1) * blockW;
-      if (x >= bx0 && x <= bx1 && y >= y0 && y <= y1) {
-        hoveredSubnetIdx = i;
-        showTooltip(stepObj.subnets[i], e.clientX, e.clientY);
-        found = true;
-        break;
+  // Scenario selection logic
+  window.addEventListener('DOMContentLoaded', () => {
+    const scenarioSelect = document.getElementById('subnet-sim-scenario');
+    const customInputs = document.getElementById('subnet-sim-custom-inputs');
+    const customNetwork = document.getElementById('subnet-sim-custom-network');
+    const customCount = document.getElementById('subnet-sim-custom-count');
+    function setScenario(scenarioVal) {
+      if (scenarioVal === '24-26') {
+        scenario = { network: '192.168.1.0/24', count: 4 };
+      } else if (scenarioVal === '16-18') {
+        scenario = { network: '10.0.0.0/16', count: 4 };
+      } else if (scenarioVal === 'custom') {
+        scenario = {
+          network: customNetwork.value || '10.0.0.0/20',
+          count: parseInt(customCount.value) || 4
+        };
       }
+      calculateSubnets();
+      running = true;
+      goToStep(0);
     }
-    if (!found) {
-      hoveredSubnetIdx = null;
-      hideTooltip();
+    if (scenarioSelect) {
+      scenarioSelect.addEventListener('change', (e) => {
+        if (e.target.value === 'custom') {
+          customInputs.style.display = '';
+        } else {
+          customInputs.style.display = 'none';
+        }
+        setScenario(e.target.value);
+      });
+    }
+    if (customNetwork && customCount) {
+      customNetwork.addEventListener('input', () => setScenario('custom'));
+      customCount.addEventListener('input', () => setScenario('custom'));
+    }
+    // Set initial scenario
+    setScenario(scenarioSelect ? scenarioSelect.value : '24-26');
+  });
+
+  // Navigation buttons
+  window.addEventListener('DOMContentLoaded', () => {
+    const backBtn = document.getElementById('subnet-sim-back');
+    const nextBtn = document.getElementById('subnet-sim-next');
+    const replayBtn = document.getElementById('subnet-sim-replay');
+    if (backBtn && nextBtn && replayBtn) {
+      backBtn.addEventListener('click', () => {
+        goToStep(step - 1);
+      });
+      nextBtn.addEventListener('click', () => {
+        goToStep(step + 1);
+      });
+      replayBtn.addEventListener('click', () => {
+        goToStep(0);
+      });
+    }
+    updateControls && updateControls();
+  });
+
+  // Add Reset button logic
+  window.addEventListener('DOMContentLoaded', () => {
+    const resetBtn = document.getElementById('subnet-sim-reset');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        // Reset scenario controls to default
+        const scenarioSelect = document.getElementById('subnet-sim-scenario');
+        const customNetwork = document.getElementById('subnet-sim-custom-network');
+        const customCount = document.getElementById('subnet-sim-custom-count');
+        if (scenarioSelect) scenarioSelect.value = '24-26';
+        if (customNetwork) customNetwork.value = '';
+        if (customCount) customCount.value = '';
+        // Set scenario to default and redraw
+        scenario = { network: '192.168.1.0/24', count: 4 };
+        calculateSubnets();
+        running = true;
+        goToStep(0);
+      });
     }
   });
-  canvas.addEventListener('mouseleave', () => { hoveredSubnetIdx = null; hideTooltip(); });
 
-  // Init
+  // Progress bar and step info update
+  function updateProgressBar() {
+    const progressBar = document.getElementById('subnet-sim-progress');
+    if (!progressBar) return;
+    const percent = Math.round((step / (steps.length - 1)) * 100);
+    progressBar.style.width = percent + '%';
+    progressBar.setAttribute('aria-valuenow', percent);
+    progressBar.textContent = percent + '%';
+  }
+  function updateStepInfo() {
+    const titleEl = document.getElementById('subnet-sim-step-title');
+    const explainEl = document.getElementById('subnet-sim-step-explanation');
+    if (!titleEl || !explainEl) return;
+    titleEl.textContent = steps[step]?.title || '';
+    explainEl.textContent = typeof steps[step]?.explain === 'function' ? steps[step].explain() : (steps[step]?.explain || '');
+  }
+
+  // Initial draw
   resize();
   draw();
 })();
@@ -872,125 +756,43 @@ window.addEventListener('DOMContentLoaded', () => {
   updateControls();
 });
 
-// Update controls on every draw and step change
+// --- Progress Bar and Step Info Update Logic ---
+function updateProgressBar() {
+  const progressBar = document.getElementById('subnet-sim-progress');
+  if (!progressBar) return;
+  const percent = Math.round((step / (steps.length - 1)) * 100);
+  progressBar.style.width = percent + '%';
+  progressBar.setAttribute('aria-valuenow', percent);
+  progressBar.textContent = percent + '%';
+}
+function updateStepInfo() {
+  const titleEl = document.getElementById('subnet-sim-step-title');
+  const explainEl = document.getElementById('subnet-sim-step-explanation');
+  if (!titleEl || !explainEl) return;
+  titleEl.textContent = steps[step]?.title || '';
+  explainEl.textContent = steps[step]?.explain || '';
+}
+// Patch draw and step functions to update progress bar and step info
 const origDraw = draw;
 draw = function() {
   origDraw();
-  updateControls();
+  updateProgressBar();
+  updateStepInfo();
+  updateControls && updateControls();
 };
-
-// Update controls on animation/step changes
 const origNextStep = nextStep;
 nextStep = function() {
   origNextStep();
-  updateControls();
+  updateProgressBar();
+  updateStepInfo();
+  updateControls && updateControls();
 };
-
-// Scenario selection logic
-window.addEventListener('DOMContentLoaded', () => {
-  const scenarioSelect = document.getElementById('subnet-sim-scenario');
-  const customInputs = document.getElementById('subnet-sim-custom-inputs');
-  const customNetwork = document.getElementById('subnet-sim-custom-network');
-  const customCount = document.getElementById('subnet-sim-custom-count');
-
-  function setScenario(scenario) {
-    let net = '192.168.1.0/24', count = 4;
-    if (scenario === '24-26') {
-      net = '192.168.1.0/24'; count = 4;
-    } else if (scenario === '16-18') {
-      net = '10.0.0.0/16'; count = 4;
-    } else if (scenario === 'custom') {
-      net = customNetwork.value || '10.0.0.0/20';
-      count = parseInt(customCount.value) || 4;
-    }
-    // Update animation steps
-    updateSteps(net, count);
-    step = 0;
-    running = false;
-    animating = false;
-    draw();
-    updateControls && updateControls();
-  }
-
-  if (scenarioSelect) {
-    scenarioSelect.addEventListener('change', (e) => {
-      if (e.target.value === 'custom') {
-        customInputs.style.display = '';
-      } else {
-        customInputs.style.display = 'none';
-      }
-      setScenario(e.target.value);
-    });
-  }
-  if (customNetwork && customCount) {
-    customNetwork.addEventListener('input', () => setScenario('custom'));
-    customCount.addEventListener('input', () => setScenario('custom'));
-  }
-  // Set initial scenario
-  setScenario(scenarioSelect ? scenarioSelect.value : '24-26');
-});
-
-// Update animation steps for any scenario
-function updateSteps(network, count) {
-  // Parse network and mask
-  let [base, mask] = network.split('/');
-  mask = parseInt(mask);
-  if (!base || isNaN(mask) || mask < 1 || mask > 30) {
-    base = '10.0.0.0'; mask = 20;
-  }
-  if (!count || count < 2 || count > 32) count = 4;
-  // Calculate new mask
-  const newMask = mask + Math.ceil(Math.log2(count));
-  const subnetSize = Math.pow(2, 32 - newMask);
-  // Generate subnets
-  let subnets = [];
-  function ipToInt(ip) {
-    return ip.split('.').reduce((acc, oct) => (acc << 8) + parseInt(oct), 0);
-  }
-  function intToIp(int) {
-    return [
-      (int >>> 24) & 255,
-      (int >>> 16) & 255,
-      (int >>> 8) & 255,
-      int & 255
-    ].join('.');
-  }
-  const baseInt = ipToInt(base);
-  for (let i = 0; i < count; i++) {
-    const netInt = baseInt + i * subnetSize;
-    const bcastInt = netInt + subnetSize - 1;
-    subnets.push({
-      base: intToIp(netInt),
-      mask: newMask,
-      range: `${intToIp(netInt + 1)} - ${intToIp(bcastInt - 1)}`,
-      broadcast: intToIp(bcastInt),
-      highlight: i === 0
-    });
-  }
-  // Update steps
-  steps.length = 0;
-  steps.push(
-    {
-      title: `Step 1: Start with the ${network} network`,
-      explain: `${network}`,
-      subnets: [{ base, mask, highlight: true }]
-    },
-    {
-      title: `Step 2: Calculate subnet mask for ${count} subnets`,
-      explain: `New mask: /${newMask} (${count} subnets)`,
-      subnets: subnets.map((s, i) => ({ base: s.base, mask: s.mask, highlight: i === 0 }))
-    },
-    {
-      title: `Step 3: Calculate ranges for each subnet`,
-      explain: `Each /${newMask}: ${subnetSize - 2} hosts, ${subnetSize} IPs`,
-      subnets: subnets.map((s, i) => ({ ...s, highlight: i === 0 }))
-    },
-    {
-      title: `Step 4: All subnets visualized`,
-      explain: '',
-      subnets: subnets
-    }
-  );
+// On replay/reset, reset progress bar
+if (typeof window !== 'undefined') {
+  window.addEventListener('DOMContentLoaded', () => {
+    updateProgressBar();
+    updateStepInfo();
+  });
 }
 
 // Initialize simulation when DOM is loaded

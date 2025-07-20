@@ -64,6 +64,7 @@
                         <p class="text-center text-muted mb-0">
                             Enter your network details below to calculate optimal subnet configurations
                         </p>
+                        <p class="text-muted small mt-2"><i class="bi bi-lock me-1"></i>Account required for notes and saved results. Basic subnetting is available instantly.</p>
                     </div>
                     {% if error %}
                     <div class="alert alert-danger animate__animated animate__fadeIn">
@@ -172,6 +173,11 @@
                                     </tbody>
                                 </table>
                             </div>
+                        </div>
+                        <!-- Calculation Explanation Section -->
+                        <div id="calculationExplanation" class="card mt-4 shadow-sm p-4" style="display: none; background: var(--color-bg-alt); border-radius: 1rem;">
+                            <h4 class="fw-semibold mb-3"><i class="bi bi-info-circle me-2"></i>How This Calculation Was Done</h4>
+                            <div id="explanationContent" class="text-muted" style="font-size:1.08rem;"></div>
                         </div>
                     </div>
                 </div>
@@ -413,6 +419,34 @@ document.addEventListener('DOMContentLoaded', function() {
                 row.insertCell().textContent = result.last_usable;
             });
         }
+        // Show explanation section and set content
+        const explanationSection = document.getElementById('calculationExplanation');
+        const explanationContent = document.getElementById('explanationContent');
+        if (vlanMode) {
+            explanationContent.innerHTML = `
+                <strong>VLAN Mode:</strong> The calculator divided your network into subnets based on the VLANs you specified. <br>
+                Each VLAN is assigned a unique subnet, ensuring isolation and proper address allocation. <br>
+                The subnet size is determined by the number of VLANs and the available address space in your network. <br>
+                <ul class='mb-0'>
+                  <li><strong>Step 1:</strong> The total address space is split into as many subnets as VLANs.</li>
+                  <li><strong>Step 2:</strong> Each subnet is assigned to a VLAN ID and name as you provided.</li>
+                  <li><strong>Step 3:</strong> Subnet masks and ranges are calculated to avoid overlap.</li>
+                </ul>
+                <span class='text-success'>This approach is ideal for segmenting networks by department, function, or security zone.</span>
+            `;
+        } else {
+            explanationContent.innerHTML = `
+                <strong>Host Mode:</strong> The calculator determines the smallest subnet size that can accommodate the number of hosts you entered. <br>
+                It then divides the network into as many subnets of that size as possible. <br>
+                <ul class='mb-0'>
+                  <li><strong>Step 1:</strong> Calculates the minimum subnet mask that supports your host count (including network and broadcast addresses).</li>
+                  <li><strong>Step 2:</strong> Splits the network into subnets of that size.</li>
+                  <li><strong>Step 3:</strong> Lists each subnet with its network address, mask, usable host range, and gateway.</li>
+                </ul>
+                <span class='text-success'>This is useful for planning networks where you know the number of devices per segment.</span>
+            `;
+        }
+        explanationSection.style.display = 'block';
     }
 
     // Download as CSV functionality

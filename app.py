@@ -772,8 +772,8 @@ def profile():
 def settings():
     return '<h2>Settings page (coming soon)</h2>'
 
-@app.route('/terms')
-def terms():
+@app.route('/privacy')
+def privacy():
     return render_template('terms.html')
 
 @app.context_processor
