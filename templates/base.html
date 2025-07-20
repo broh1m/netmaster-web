@@ -12,6 +12,15 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/alerts.css') }}">
 </head>
 <body>
+    <!-- Development Banner -->
+    <div class="alert alert-warning alert-dismissible fade show m-0 border-0 rounded-0 text-center" role="alert" id="developmentBanner" style="background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%); border-bottom: 2px solid #ffc107 !important;">
+        <div class="container">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <strong>Development Notice:</strong> This site is currently under development. Some features may not work properly or may be incomplete. We appreciate your patience!
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    </div>
+
     <!-- Remove all global CSRF token inputs. Only forms should have CSRF tokens. -->
     
     <nav class="navbar main-navbar navbar-expand-lg glassy-navbar py-2">
@@ -173,41 +182,56 @@
                 });
             }
 
-            // Convert UTC timestamps to local time
-            document.querySelectorAll('.local-timestamp').forEach(function(element) {
-                const utcTimestamp = element.getAttribute('data-timestamp');
-                if (utcTimestamp) {
-                    // Show loading state
-                    element.textContent = 'Converting...';
+                    // Convert UTC timestamps to local time
+        document.querySelectorAll('.local-timestamp').forEach(function(element) {
+            const utcTimestamp = element.getAttribute('data-timestamp');
+            if (utcTimestamp) {
+                // Show loading state
+                element.textContent = 'Converting...';
+                
+                try {
+                    const date = new Date(utcTimestamp);
                     
-                    try {
-                        const date = new Date(utcTimestamp);
-                        
-                        // Format date as MM/DD/YYYY
-                        const month = String(date.getMonth() + 1).padStart(2, '0');
-                        const day = String(date.getDate()).padStart(2, '0');
-                        const year = date.getFullYear();
-                        
-                        // Format time with timezone
-                        const hours = String(date.getHours()).padStart(2, '0');
-                        const minutes = String(date.getMinutes()).padStart(2, '0');
-                        const seconds = String(date.getSeconds()).padStart(2, '0');
-                        
-                        // Get timezone offset
-                        const timezoneOffset = -date.getTimezoneOffset();
-                        const timezoneHours = Math.floor(Math.abs(timezoneOffset) / 60);
-                        const timezoneMinutes = Math.abs(timezoneOffset) % 60;
-                        const timezoneSign = timezoneOffset >= 0 ? '+' : '-';
-                        const timezoneString = `${timezoneSign}${String(timezoneHours).padStart(2, '0')}:${String(timezoneMinutes).padStart(2, '0')}`;
-                        
-                        // Combine date and time with timezone
-                        element.textContent = `${month}/${day}/${year} ${hours}:${minutes}:${seconds} (UTC${timezoneString})`;
-                    } catch (error) {
-                        console.error('Error converting timestamp:', error);
-                        element.textContent = 'Error converting time';
-                    }
+                    // Format date as MM/DD/YYYY
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    const year = date.getFullYear();
+                    
+                    // Format time with timezone
+                    const hours = String(date.getHours()).padStart(2, '0');
+                    const minutes = String(date.getMinutes()).padStart(2, '0');
+                    const seconds = String(date.getSeconds()).padStart(2, '0');
+                    
+                    // Get timezone offset
+                    const timezoneOffset = -date.getTimezoneOffset();
+                    const timezoneHours = Math.floor(Math.abs(timezoneOffset) / 60);
+                    const timezoneMinutes = Math.abs(timezoneOffset) % 60;
+                    const timezoneSign = timezoneOffset >= 0 ? '+' : '-';
+                    const timezoneString = `${timezoneSign}${String(timezoneHours).padStart(2, '0')}:${String(timezoneMinutes).padStart(2, '0')}`;
+                    
+                    // Combine date and time with timezone
+                    element.textContent = `${month}/${day}/${year} ${hours}:${minutes}:${seconds} (UTC${timezoneString})`;
+                } catch (error) {
+                    console.error('Error converting timestamp:', error);
+                    element.textContent = 'Error converting time';
                 }
+            }
+        });
+
+        // Development banner functionality
+        const developmentBanner = document.getElementById('developmentBanner');
+        if (developmentBanner) {
+            // Check if user has dismissed the banner
+            const bannerDismissed = localStorage.getItem('developmentBannerDismissed');
+            if (bannerDismissed === 'true') {
+                developmentBanner.style.display = 'none';
+            }
+
+            // Handle banner dismissal
+            developmentBanner.addEventListener('closed.bs.alert', function() {
+                localStorage.setItem('developmentBannerDismissed', 'true');
             });
+        }
         });
     </script>
     <script>
