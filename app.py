@@ -429,6 +429,20 @@ def edit_note(note_id):
         flash('An error occurred while editing the note', 'error')
         return redirect(url_for('notes'))
 
+@app.route('/notes/view/<int:note_id>')
+@login_required
+def view_note(note_id):
+    try:
+        note = Note.get_by_id(note_id)
+        if not note or note.user_id != current_user.id:
+            flash('Note not found or access denied', 'error')
+            return redirect(url_for('notes'))
+        return render_template('view_note.html', note=note)
+    except Exception as e:
+        app.logger.error(f"Error viewing note: {str(e)}", exc_info=True)
+        flash('An error occurred while viewing the note', 'error')
+        return redirect(url_for('notes'))
+
 @app.route('/calculate_subnets', methods=['POST'])
 def calculate_subnets_route():
     try:
