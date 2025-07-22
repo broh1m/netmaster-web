@@ -58,10 +58,10 @@
                     {% endif %}
                     {% if current_user.is_authenticated %}
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle rounded-pill px-3 py-1 profile-dropdown" href="#" id="profileDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <a class="nav-link dropdown-toggle rounded-pill px-3 py-1 profile-dropdown bg-primary text-white border-0 shadow" href="#" id="profileDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-person-circle me-1"></i> {{ current_user.username }}
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-end mt-2" aria-labelledby="profileDropdown">
+                        <ul class="dropdown-menu dropdown-menu-end dropdown-menu-dark mt-2 shadow-lg" aria-labelledby="profileDropdown" style="z-index: 9999;">
                             <li><a class="dropdown-item" href="{{ url_for('profile') }}">Profile <i class="bi bi-person ms-2"></i></a></li>
                             <li><a class="dropdown-item" href="{{ url_for('settings') }}">Settings <i class="bi bi-gear ms-2"></i></a></li>
                             <li><hr class="dropdown-divider"></li>

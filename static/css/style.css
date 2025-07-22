@@ -1025,9 +1025,65 @@ html, body, .how-section, .demo-section, .cta-section, .footer-minimal {
   color: #f3f6fa !important;
 } 
 
+/* --- Dropdown Z-Index and Dark Mode Fixes --- */
 .dropdown-menu {
-  z-index: 2000 !important;
+  z-index: 9999 !important;
   position: absolute !important;
+}
+.navbar .dropdown {
+  z-index: 9998 !important;
+}
+.main-navbar {
+  z-index: 9997 !important;
+}
+
+/* Profile dropdown button styling */
+.profile-dropdown.bg-primary {
+  background: var(--color-primary) !important;
+  color: #fff !important;
+  border: none !important;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+}
+.profile-dropdown.bg-primary:hover,
+.profile-dropdown.bg-primary:focus {
+  background: var(--color-primary-dark) !important;
+  color: #fff !important;
+}
+
+/* Dark mode dropdown styling */
+[data-bs-theme="dark"] .dropdown-menu-dark {
+  background-color: #23272b !important;
+  border: 1px solid #2d3344 !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3) !important;
+}
+[data-bs-theme="dark"] .dropdown-menu-dark .dropdown-item {
+  color: #fff !important;
+}
+[data-bs-theme="dark"] .dropdown-menu-dark .dropdown-item:hover,
+[data-bs-theme="dark"] .dropdown-menu-dark .dropdown-item:focus {
+  background-color: var(--color-primary) !important;
+  color: #fff !important;
+}
+[data-bs-theme="dark"] .dropdown-menu-dark .dropdown-divider {
+  border-color: #2d3344 !important;
+}
+
+/* Light mode dropdown styling */
+[data-bs-theme="light"] .dropdown-menu-dark {
+  background-color: #fff !important;
+  border: 1px solid var(--color-border) !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1) !important;
+}
+[data-bs-theme="light"] .dropdown-menu-dark .dropdown-item {
+  color: var(--color-text) !important;
+}
+[data-bs-theme="light"] .dropdown-menu-dark .dropdown-item:hover,
+[data-bs-theme="light"] .dropdown-menu-dark .dropdown-item:focus {
+  background-color: var(--color-primary) !important;
+  color: #fff !important;
+}
+[data-bs-theme="light"] .dropdown-menu-dark .dropdown-divider {
+  border-color: var(--color-border) !important;
 } 
 
 .card {
