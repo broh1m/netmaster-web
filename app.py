@@ -194,6 +194,8 @@ class User(UserMixin, db.Model):
     language = db.Column(db.String(10), default='en')
     default_calculation_mode = db.Column(db.String(20), default='host')
     auto_save_results = db.Column(db.String(20), default='ask')
+    created_at = db.Column(db.DateTime(timezone=True), default=get_local_time)
+    updated_at = db.Column(db.DateTime(timezone=True), default=get_local_time, onupdate=get_local_time)
     notes = db.relationship('Note', backref='author', lazy=True)
 
     def set_password(self, password):
@@ -274,7 +276,7 @@ def logout():
     return redirect(url_for('login'))
 
 @app.route('/register', methods=['GET', 'POST'])
-@limiter.limit("3 per hour")
+@limiter.limit("10 per hour")
 def register():
     if request.method == 'POST':
         try:
@@ -791,12 +793,159 @@ def update_theme():
 @app.route('/profile')
 @login_required
 def profile():
-    return '<h2>Profile page (coming soon)</h2>'
+    return render_template('profile.html')
 
 @app.route('/settings')
 @login_required
 def settings():
-    return '<h2>Settings page (coming soon)</h2>'
+    return redirect(url_for('profile'))
+
+@app.route('/update_profile', methods=['POST'])
+@login_required
+@limiter.limit("10 per minute")
+def update_profile():
+    try:
+        theme = request.form.get('theme', 'auto')
+        language = request.form.get('language', 'en')
+        default_calculation_mode = request.form.get('default_calculation_mode', 'host')
+        auto_save_results = request.form.get('auto_save_results', 'ask')
+        
+        # Validate inputs
+        if theme not in ['light', 'dark', 'auto']:
+            return jsonify({'success': False, 'error': 'Invalid theme value'}), 400
+        
+        if language not in ['en', 'es', 'fr', 'de']:
+            return jsonify({'success': False, 'error': 'Invalid language value'}), 400
+        
+        if default_calculation_mode not in ['host', 'vlan']:
+            return jsonify({'success': False, 'error': 'Invalid calculation mode'}), 400
+        
+        if auto_save_results not in ['ask', 'always', 'never']:
+            return jsonify({'success': False, 'error': 'Invalid auto-save setting'}), 400
+        
+        # Update user preferences
+        current_user.theme = theme
+        current_user.language = language
+        current_user.default_calculation_mode = default_calculation_mode
+        current_user.auto_save_results = auto_save_results
+        current_user.updated_at = get_local_time()
+        
+        db.session.commit()
+        
+        return jsonify({'success': True, 'theme': theme})
+        
+    except Exception as e:
+        app.logger.error(f"Error updating profile: {str(e)}")
+        db.session.rollback()
+        return jsonify({'success': False, 'error': 'Failed to update profile'}), 500
+
+@app.route('/change_password', methods=['POST'])
+@login_required
+@limiter.limit("5 per minute")
+def change_password():
+    try:
+        current_password = request.form.get('current_password', '').strip()
+        new_password = request.form.get('new_password', '').strip()
+        confirm_password = request.form.get('confirm_password', '').strip()
+        
+        # Validate current password
+        if not current_user.check_password(current_password):
+            return jsonify({'success': False, 'error': 'Current password is incorrect'}), 400
+        
+        # Validate new password
+        if not new_password or not PASSWORD_REGEX.match(new_password):
+            return jsonify({'success': False, 'error': 'New password must be at least 8 characters with uppercase, lowercase, and number'}), 400
+        
+        # Confirm password match
+        if new_password != confirm_password:
+            return jsonify({'success': False, 'error': 'New passwords do not match'}), 400
+        
+        # Update password
+        current_user.set_password(new_password)
+        current_user.updated_at = get_local_time()
+        
+        db.session.commit()
+        
+        return jsonify({'success': True})
+        
+    except Exception as e:
+        app.logger.error(f"Error changing password: {str(e)}")
+        db.session.rollback()
+        return jsonify({'success': False, 'error': 'Failed to change password'}), 500
+
+@app.route('/delete_account', methods=['POST'])
+@login_required
+@limiter.limit("3 per hour")
+def delete_account():
+    try:
+        confirmation = request.form.get('delete_confirmation', '').strip()
+        
+        if confirmation != 'DELETE':
+            flash('Please type "DELETE" to confirm account deletion', 'error')
+            return redirect(url_for('profile'))
+        
+        # Delete all user's notes first
+        Note.query.filter_by(user_id=current_user.id).delete()
+        
+        # Delete the user
+        db.session.delete(current_user)
+        db.session.commit()
+        
+        logout_user()
+        flash('Your account has been permanently deleted', 'success')
+        return redirect(url_for('landing'))
+        
+    except Exception as e:
+        app.logger.error(f"Error deleting account: {str(e)}")
+        db.session.rollback()
+        flash('An error occurred while deleting your account', 'error')
+        return redirect(url_for('profile'))
+
+@app.route('/export_data')
+@login_required
+@limiter.limit("5 per hour")
+def export_data():
+    try:
+        # Get user data
+        user_data = {
+            'user': {
+                'id': current_user.id,
+                'username': current_user.username,
+                'email': current_user.email,
+                'theme': current_user.theme,
+                'language': current_user.language,
+                'default_calculation_mode': current_user.default_calculation_mode,
+                'auto_save_results': current_user.auto_save_results,
+                'created_at': current_user.created_at.isoformat() if current_user.created_at else None,
+                'updated_at': current_user.updated_at.isoformat() if current_user.updated_at else None
+            },
+            'notes': []
+        }
+        
+        # Get user's notes
+        for note in current_user.notes:
+            user_data['notes'].append({
+                'id': note.id,
+                'title': note.title,
+                'content': note.content,
+                'created_at': note.created_at.isoformat() if note.created_at else None,
+                'updated_at': note.updated_at.isoformat() if note.updated_at else None
+            })
+        
+        # Create JSON response
+        from flask import Response
+        response = Response(
+            json.dumps(user_data, indent=2, default=str),
+            mimetype='application/json'
+        )
+        response.headers['Content-Disposition'] = f'attachment; filename=netmaster_data_{current_user.username}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+        
+        return response
+        
+    except Exception as e:
+        app.logger.error(f"Error exporting data: {str(e)}")
+        flash('An error occurred while exporting your data', 'error')
+        return redirect(url_for('profile'))
 
 @app.route('/privacy')
 def privacy():

@@ -1,0 +1,438 @@
+{% extends "base.html" %}
+
+{% block title %}Profile - NetMaster{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <!-- Profile Header -->
+            <div class="card profile-header-card mb-4">
+                <div class="card-body text-center p-4">
+                    <div class="profile-avatar mb-3">
+                        <div class="avatar-circle">
+                            <i class="bi bi-person-fill fs-1"></i>
+                        </div>
+                    </div>
+                    <h2 class="profile-username mb-2">{{ current_user.username }}</h2>
+                    <p class="profile-email text-muted mb-3">{{ current_user.email }}</p>
+                    <div class="profile-stats d-flex justify-content-center gap-4">
+                        <div class="stat-item">
+                            <div class="stat-number">{{ current_user.notes|length }}</div>
+                            <div class="stat-label">Notes</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">{{ current_user.created_at.strftime('%Y-%m-%d') if current_user.created_at else 'N/A' }}</div>
+                            <div class="stat-label">Member Since</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Profile Content Tabs -->
+            <div class="card profile-content-card">
+                <div class="card-header bg-transparent border-0">
+                    <ul class="nav nav-tabs nav-fill" id="profileTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="overview-tab" data-bs-toggle="tab" data-bs-target="#overview" type="button" role="tab">
+                                <i class="bi bi-person-circle me-2"></i>Overview
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings" type="button" role="tab">
+                                <i class="bi bi-gear me-2"></i>Settings
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="security-tab" data-bs-toggle="tab" data-bs-target="#security" type="button" role="tab">
+                                <i class="bi bi-shield-lock me-2"></i>Security
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+                <div class="card-body p-4">
+                    <div class="tab-content" id="profileTabsContent">
+                        <!-- Overview Tab -->
+                        <div class="tab-pane fade show active" id="overview" role="tabpanel">
+                            <div class="row">
+                                <div class="col-md-6 mb-4">
+                                    <div class="info-card">
+                                        <h5 class="info-card-title">
+                                            <i class="bi bi-info-circle me-2"></i>Account Information
+                                        </h5>
+                                        <div class="info-list">
+                                            <div class="info-item">
+                                                <span class="info-label">Username:</span>
+                                                <span class="info-value">{{ current_user.username }}</span>
+                                            </div>
+                                            <div class="info-item">
+                                                <span class="info-label">Email:</span>
+                                                <span class="info-value">{{ current_user.email }}</span>
+                                            </div>
+                                            <div class="info-item">
+                                                <span class="info-label">User ID:</span>
+                                                <span class="info-value">#{{ current_user.id }}</span>
+                                            </div>
+                                            <div class="info-item">
+                                                <span class="info-label">Theme:</span>
+                                                <span class="info-value badge bg-primary">{{ current_user.theme|title }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6 mb-4">
+                                    <div class="info-card">
+                                        <h5 class="info-card-title">
+                                            <i class="bi bi-activity me-2"></i>Activity Summary
+                                        </h5>
+                                        <div class="info-list">
+                                            <div class="info-item">
+                                                <span class="info-label">Total Notes:</span>
+                                                <span class="info-value">{{ current_user.notes|length }}</span>
+                                            </div>
+                                            <div class="info-item">
+                                                <span class="info-label">Default Mode:</span>
+                                                <span class="info-value badge bg-secondary">{{ current_user.default_calculation_mode|title }}</span>
+                                            </div>
+                                            <div class="info-item">
+                                                <span class="info-label">Auto Save:</span>
+                                                <span class="info-value badge bg-info">{{ current_user.auto_save_results|title }}</span>
+                                            </div>
+                                            <div class="info-item">
+                                                <span class="info-label">Language:</span>
+                                                <span class="info-value badge bg-success">{{ current_user.language|upper }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Recent Notes -->
+                            <div class="recent-notes-section">
+                                <h5 class="section-title">
+                                    <i class="bi bi-journal-text me-2"></i>Recent Notes
+                                </h5>
+                                {% if current_user.notes %}
+                                    <div class="row">
+                                        {% for note in current_user.notes[:3] %}
+                                        <div class="col-md-4 mb-3">
+                                            <div class="note-preview-card">
+                                                <div class="note-preview-header">
+                                                    <h6 class="note-preview-title">{{ note.title[:30] }}{% if note.title|length > 30 %}...{% endif %}</h6>
+                                                    <small class="note-preview-date">{{ note.created_at.strftime('%m/%d/%Y') }}</small>
+                                                </div>
+                                                <p class="note-preview-content">{{ note.content[:100] }}{% if note.content|length > 100 %}...{% endif %}</p>
+                                                <a href="{{ url_for('view_note', note_id=note.id) }}" class="btn btn-sm btn-outline-primary">View Note</a>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% if current_user.notes|length > 3 %}
+                                    <div class="text-center mt-3">
+                                        <a href="{{ url_for('notes') }}" class="btn btn-primary">View All Notes</a>
+                                    </div>
+                                    {% endif %}
+                                {% else %}
+                                    <div class="empty-state">
+                                        <i class="bi bi-journal-plus fs-1 text-muted mb-3"></i>
+                                        <p class="text-muted">No notes yet. Start creating notes to see them here!</p>
+                                        <a href="{{ url_for('home') }}" class="btn btn-primary">Create Your First Note</a>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Settings Tab -->
+                        <div class="tab-pane fade" id="settings" role="tabpanel">
+                            <form id="profileSettingsForm" method="POST" action="{{ url_for('update_profile') }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                
+                                <div class="row">
+                                    <div class="col-md-6 mb-4">
+                                        <div class="settings-card">
+                                            <h5 class="settings-card-title">
+                                                <i class="bi bi-palette me-2"></i>Appearance
+                                            </h5>
+                                            <div class="mb-3">
+                                                <label for="theme" class="form-label">Theme</label>
+                                                <select class="form-select" id="theme" name="theme">
+                                                    <option value="light" {% if current_user.theme == 'light' %}selected{% endif %}>Light</option>
+                                                    <option value="dark" {% if current_user.theme == 'dark' %}selected{% endif %}>Dark</option>
+                                                    <option value="auto" {% if current_user.theme == 'auto' %}selected{% endif %}>Auto (System)</option>
+                                                </select>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="language" class="form-label">Language</label>
+                                                <select class="form-select" id="language" name="language">
+                                                    <option value="en" {% if current_user.language == 'en' %}selected{% endif %}>English</option>
+                                                    <option value="es" {% if current_user.language == 'es' %}selected{% endif %}>Español</option>
+                                                    <option value="fr" {% if current_user.language == 'fr' %}selected{% endif %}>Français</option>
+                                                    <option value="de" {% if current_user.language == 'de' %}selected{% endif %}>Deutsch</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-md-6 mb-4">
+                                        <div class="settings-card">
+                                            <h5 class="settings-card-title">
+                                                <i class="bi bi-calculator me-2"></i>Calculator Preferences
+                                            </h5>
+                                            <div class="mb-3">
+                                                <label for="default_calculation_mode" class="form-label">Default Calculation Mode</label>
+                                                <select class="form-select" id="default_calculation_mode" name="default_calculation_mode">
+                                                    <option value="host" {% if current_user.default_calculation_mode == 'host' %}selected{% endif %}>Host-based</option>
+                                                    <option value="vlan" {% if current_user.default_calculation_mode == 'vlan' %}selected{% endif %}>VLAN-based</option>
+                                                </select>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="auto_save_results" class="form-label">Auto-save Results</label>
+                                                <select class="form-select" id="auto_save_results" name="auto_save_results">
+                                                    <option value="ask" {% if current_user.auto_save_results == 'ask' %}selected{% endif %}>Ask before saving</option>
+                                                    <option value="always" {% if current_user.auto_save_results == 'always' %}selected{% endif %}>Always save</option>
+                                                    <option value="never" {% if current_user.auto_save_results == 'never' %}selected{% endif %}>Never save</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="text-center">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="bi bi-check-circle me-2"></i>Save Settings
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+
+                        <!-- Security Tab -->
+                        <div class="tab-pane fade" id="security" role="tabpanel">
+                            <div class="row">
+                                <div class="col-md-6 mb-4">
+                                    <div class="security-card">
+                                        <h5 class="security-card-title">
+                                            <i class="bi bi-key me-2"></i>Change Password
+                                        </h5>
+                                        <form id="changePasswordForm" method="POST" action="{{ url_for('change_password') }}">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <div class="mb-3">
+                                                <label for="current_password" class="form-label">Current Password</label>
+                                                <input type="password" class="form-control" id="current_password" name="current_password" required>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="new_password" class="form-label">New Password</label>
+                                                <input type="password" class="form-control" id="new_password" name="new_password" required>
+                                                <div class="form-text">Password must be at least 8 characters with uppercase, lowercase, and number.</div>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="confirm_password" class="form-label">Confirm New Password</label>
+                                                <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
+                                            </div>
+                                            <button type="submit" class="btn btn-warning">
+                                                <i class="bi bi-shield-check me-2"></i>Update Password
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-6 mb-4">
+                                    <div class="security-card">
+                                        <h5 class="security-card-title">
+                                            <i class="bi bi-trash me-2"></i>Account Actions
+                                        </h5>
+                                        <div class="d-grid gap-2">
+                                            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteAccountModal">
+                                                <i class="bi bi-exclamation-triangle me-2"></i>Delete Account
+                                            </button>
+                                            <button type="button" class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#exportDataModal">
+                                                <i class="bi bi-download me-2"></i>Export My Data
+                                            </button>
+                                        </div>
+                                        <div class="mt-3">
+                                            <small class="text-muted">
+                                                <i class="bi bi-info-circle me-1"></i>
+                                                Account deletion is permanent and cannot be undone.
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Account Modal -->
+<div class="modal fade" id="deleteAccountModal" tabindex="-1" aria-labelledby="deleteAccountModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deleteAccountModalLabel">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Delete Account
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>Warning:</strong> This action cannot be undone. All your data including notes and preferences will be permanently deleted.</p>
+                <form id="deleteAccountForm" method="POST" action="{{ url_for('delete_account') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label for="delete_confirmation" class="form-label">Type "DELETE" to confirm</label>
+                        <input type="text" class="form-control" id="delete_confirmation" name="delete_confirmation" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" form="deleteAccountForm" class="btn btn-danger">
+                    <i class="bi bi-trash me-2"></i>Delete Account
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Export Data Modal -->
+<div class="modal fade" id="exportDataModal" tabindex="-1" aria-labelledby="exportDataModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exportDataModalLabel">
+                    <i class="bi bi-download me-2"></i>Export Data
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Download all your data including notes and preferences in JSON format.</p>
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    Your data will be exported as a JSON file containing all your notes and account information.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <a href="{{ url_for('export_data') }}" class="btn btn-primary">
+                    <i class="bi bi-download me-2"></i>Export Data
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle form submissions
+    const profileSettingsForm = document.getElementById('profileSettingsForm');
+    const changePasswordForm = document.getElementById('changePasswordForm');
+    const deleteAccountForm = document.getElementById('deleteAccountForm');
+
+    // Profile settings form
+    if (profileSettingsForm) {
+        profileSettingsForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            
+            fetch(this.action, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('Settings updated successfully!', 'success');
+                    // Update theme if changed
+                    if (data.theme) {
+                        setTheme(data.theme);
+                    }
+                } else {
+                    showAlert(data.error || 'Failed to update settings', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('An error occurred while updating settings', 'error');
+            });
+        });
+    }
+
+    // Change password form
+    if (changePasswordForm) {
+        changePasswordForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const newPassword = document.getElementById('new_password').value;
+            const confirmPassword = document.getElementById('confirm_password').value;
+            
+            if (newPassword !== confirmPassword) {
+                showAlert('New passwords do not match', 'error');
+                return;
+            }
+            
+            const formData = new FormData(this);
+            
+            fetch(this.action, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('Password updated successfully!', 'success');
+                    this.reset();
+                } else {
+                    showAlert(data.error || 'Failed to update password', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('An error occurred while updating password', 'error');
+            });
+        });
+    }
+
+    // Delete account form
+    if (deleteAccountForm) {
+        deleteAccountForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const confirmation = document.getElementById('delete_confirmation').value;
+            
+            if (confirmation !== 'DELETE') {
+                showAlert('Please type "DELETE" to confirm account deletion', 'error');
+                return;
+            }
+            
+            if (confirm('Are you absolutely sure you want to delete your account? This action cannot be undone.')) {
+                this.submit();
+            }
+        });
+    }
+
+    // Alert function
+    function showAlert(message, type) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show`;
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        const container = document.querySelector('.container');
+        container.insertBefore(alertDiv, container.firstChild);
+        
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.remove();
+            }
+        }, 5000);
+    }
+});
+</script>
+{% endblock %} 
