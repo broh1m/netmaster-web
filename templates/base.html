@@ -58,7 +58,14 @@
                     <ul class="dropdown-menu dropdown-menu-end mt-2 dropdown-menu-dark" aria-labelledby="profileDropdown">
                         <li><a class="dropdown-item" href="{{ url_for('profile') }}">Profile <i class="bi bi-person ms-2"></i></a></li>
                         <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item text-danger" href="{{ url_for('logout') }}">Logout <i class="bi bi-box-arrow-right ms-2"></i></a></li>
+                        <li>
+                            <form method="POST" action="{{ url_for('logout') }}" style="display: inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="dropdown-item text-danger" onclick="return confirm('Are you sure you want to logout?')" style="background: none; border: none; width: 100%; text-align: left; padding: 0.5rem 1rem;">
+                                    Logout <i class="bi bi-box-arrow-right ms-2"></i>
+                                </button>
+                            </form>
+                        </li>
                     </ul>
                 </div>
                 {% else %}
