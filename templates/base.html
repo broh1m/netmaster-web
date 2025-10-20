@@ -19,14 +19,6 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/alerts.css') }}">
 </head>
 <body>
-    <!-- Development Banner -->
-    <div class="alert alert-warning alert-dismissible fade show m-0 border-0 rounded-0 text-center development-banner" role="alert" id="developmentBanner">
-        <div class="container">
-            <i class="bi bi-exclamation-triangle-fill me-2"></i>
-            <strong>Development Notice:</strong> This site is currently under development. Some features may not work properly or may be incomplete. We appreciate your patience!
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    </div>
 
     <!-- Remove all global CSRF token inputs. Only forms should have CSRF tokens. -->
     
@@ -163,26 +155,11 @@
                         // Combine date and time with timezone
                         element.textContent = `${month}/${day}/${year} ${hours}:${minutes}:${seconds} (UTC${timezoneString})`;
                     } catch (error) {
-                        console.error('Error converting timestamp:', error);
                         element.textContent = 'Error converting time';
                     }
                 }
             });
 
-            // Development banner functionality
-            const developmentBanner = document.getElementById('developmentBanner');
-            if (developmentBanner) {
-                // Check if user has dismissed the banner
-                const bannerDismissed = localStorage.getItem('developmentBannerDismissed');
-                if (bannerDismissed === 'true') {
-                    developmentBanner.style.display = 'none';
-                }
-
-                // Handle banner dismissal
-                developmentBanner.addEventListener('closed.bs.alert', function() {
-                    localStorage.setItem('developmentBannerDismissed', 'true');
-                });
-            }
         });
     </script>
     

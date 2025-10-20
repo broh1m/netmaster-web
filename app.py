@@ -19,6 +19,10 @@ from functools import wraps
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_migrate import Migrate
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Custom exceptions for subnet calculation
 class SubnetCalculationError(Exception):
@@ -48,7 +52,9 @@ if os.environ.get('FLASK_ENV') == 'production':
         raise RuntimeError('FLASK_SECRET_KEY environment variable must be set in production!')
     app.secret_key = os.environ['FLASK_SECRET_KEY']
 else:
-    app.secret_key = os.environ.get('FLASK_SECRET_KEY') or 'dev-secret-key'
+    app.secret_key = os.environ.get('FLASK_SECRET_KEY')
+    if not app.secret_key:
+        raise RuntimeError('FLASK_SECRET_KEY environment variable must be set!')
 
 # Add escapejs filter
 @app.template_filter('escapejs')
@@ -58,12 +64,36 @@ def escapejs_filter(s):
     return str(s).replace('\\', '\\\\').replace("'", "\\'").replace('"', '\\"').replace('\n', '\\n')
 
 # Security configurations
-app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
 app.config['WTF_CSRF_ENABLED'] = True
 app.config['WTF_CSRF_TIME_LIMIT'] = 3600  # 1 hour
 app.config['SESSION_COOKIE_SAMESITE'] = "Lax"
+
+# Additional security headers
+@app.after_request
+def add_security_headers(response):
+    """Add security headers to all responses"""
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
+    
+    # Content Security Policy
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+        "font-src 'self' https://cdn.jsdelivr.net; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none';"
+    )
+    response.headers['Content-Security-Policy'] = csp
+    
+    return response
 
 # Initialize security extensions
 csrf = CSRFProtect(app)
@@ -186,7 +216,7 @@ def get_local_time():
     return datetime.now(timezone.utc)
 
 class User(UserMixin, db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.String(8), primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128))
@@ -197,6 +227,21 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime(timezone=True), default=get_local_time)
     updated_at = db.Column(db.DateTime(timezone=True), default=get_local_time, onupdate=get_local_time)
     notes = db.relationship('Note', backref='author', lazy=True)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if not self.id:
+            self.id = self.generate_user_id()
+
+    def generate_user_id(self):
+        """Generate a unique 8-character alphanumeric user ID"""
+        import string
+        chars = string.ascii_uppercase + string.digits
+        while True:
+            user_id = ''.join(secrets.choice(chars) for _ in range(8))
+            # Check if this ID already exists
+            if not User.query.get(user_id):
+                return user_id
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -210,7 +255,7 @@ class Note(db.Model):
     content = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=get_local_time, index=True)
     updated_at = db.Column(db.DateTime(timezone=True), default=get_local_time, onupdate=get_local_time, index=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user_id = db.Column(db.String(8), db.ForeignKey('user.id'), nullable=False)
 
     def __repr__(self):
         return f'<Note {self.id}>'
@@ -242,7 +287,7 @@ class Note(db.Model):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return User.query.get(user_id)
 
 def sanitize_input(text):
     """Sanitize user input to prevent XSS attacks"""
@@ -250,6 +295,23 @@ def sanitize_input(text):
         return text
     # Remove HTML tags and encode special characters
     return bleach.clean(text, strip=True)
+
+def validate_username(username):
+    """Validate username format and length"""
+    if not username or len(username) < 3 or len(username) > 80:
+        return False, "Username must be between 3 and 80 characters"
+    # Check for valid characters (alphanumeric, underscore, hyphen)
+    if not re.match(r'^[a-zA-Z0-9_-]+$', username):
+        return False, "Username can only contain letters, numbers, underscores, and hyphens"
+    return True, None
+
+def validate_email(email):
+    """Validate email format"""
+    if not email or len(email) > 120:
+        return False, "Email must be provided and less than 120 characters"
+    if not EMAIL_REGEX.match(email):
+        return False, "Please enter a valid email address"
+    return True, None
 
 import re
 EMAIL_REGEX = re.compile(r"[^@]+@[^@]+\.[^@]+")
@@ -259,13 +321,24 @@ PASSWORD_REGEX = re.compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$')
 @limiter.limit("5 per minute")
 def login():
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
+        username = sanitize_input(request.form.get('username', '').strip())
+        password = request.form.get('password', '')
+        
+        # Validate input
+        if not username or not password:
+            flash('Username and password are required', 'error')
+            return render_template('login.html')
+        
+        is_valid, error_msg = validate_username(username)
+        if not is_valid:
+            flash(error_msg, 'error')
+            return render_template('login.html')
+        
         user = User.query.filter_by(username=username).first()
         
         if user and user.check_password(password):
             login_user(user)
-            return redirect(url_for('notes'))
+            return redirect(url_for('home'))
         flash('Invalid username or password', 'error')
     return render_template('login.html')
 
@@ -286,13 +359,15 @@ def register():
             password = request.form.get('password', '').strip()
             
             # Validate username
-            if not username or len(username) < 3 or len(username) > 80:
-                flash('Username must be between 3 and 80 characters long', 'error')
+            is_valid, error_msg = validate_username(username)
+            if not is_valid:
+                flash(error_msg, 'error')
                 return redirect(url_for('register'))
             
-            # Validate email with regex
-            if not email or not EMAIL_REGEX.match(email):
-                flash('Please enter a valid email address', 'error')
+            # Validate email
+            is_valid, error_msg = validate_email(email)
+            if not is_valid:
+                flash(error_msg, 'error')
                 return redirect(url_for('register'))
             
             # Validate password complexity
@@ -335,7 +410,7 @@ def register():
 
 @app.route('/notes')
 @login_required
-# @limiter.limit("30 per minute")  # Temporarily commented out for debugging
+@limiter.limit("30 per minute")
 def notes():
     try:
         page = request.args.get('page', 1, type=int)
@@ -372,7 +447,7 @@ def create_note():
 
 @app.route('/notes/delete/<int:note_id>', methods=['POST'])
 @login_required
-# @limiter.limit("10 per minute") # Temporarily commented out for debugging
+@limiter.limit("10 per minute")
 def delete_note(note_id):
     try:
         app.logger.info(f"Delete note attempt - Note ID: {note_id}, Current User ID: {current_user.id}")
@@ -447,6 +522,7 @@ def view_note(note_id):
         return redirect(url_for('notes'))
 
 @app.route('/calculate_subnets', methods=['POST'])
+@limiter.limit("20 per minute")
 def calculate_subnets_route():
     try:
         if request.is_json:
@@ -459,15 +535,42 @@ def calculate_subnets_route():
 
         if not network_ip:
             raise NetworkValidationError("Network IP is required")
+        
+        # Additional validation for network IP length
+        if len(network_ip) > 50:  # Reasonable limit for IP/CIDR
+            raise NetworkValidationError("Network IP is too long")
 
         # VLAN mode
         if vlan_mode:
             vlans = data.get('vlans', [])
             if not vlans or not isinstance(vlans, list):
                 raise SegmentCountError("VLAN details are required")
+            
+            # Validate VLAN count limit
+            if len(vlans) > 100:  # Reasonable limit
+                raise SegmentCountError("Too many VLANs requested (maximum 100)")
+            
             num_segments = len(vlans)
-            vlan_ids = [int(v['vlan_id']) for v in vlans]
-            vlan_names = [v['vlan_name'] for v in vlans]
+            vlan_ids = []
+            vlan_names = []
+            
+            # Validate each VLAN entry
+            for v in vlans:
+                if not isinstance(v, dict) or 'vlan_id' not in v or 'vlan_name' not in v:
+                    raise SegmentCountError("Invalid VLAN entry format")
+                
+                try:
+                    vlan_id = int(v['vlan_id'])
+                    if not 1 <= vlan_id <= 4094:  # Valid VLAN ID range
+                        raise SegmentCountError(f"VLAN ID {vlan_id} is out of range (1-4094)")
+                    vlan_ids.append(vlan_id)
+                except (ValueError, TypeError):
+                    raise SegmentCountError("Invalid VLAN ID format")
+                
+                vlan_name = str(v['vlan_name']).strip()
+                if not vlan_name or len(vlan_name) > 50:
+                    raise SegmentCountError("VLAN name must be 1-50 characters")
+                vlan_names.append(sanitize_input(vlan_name))
             # Generate a unique task ID
             task_id = secrets.token_hex(16)
             calculation_progress[task_id] = {
@@ -487,7 +590,7 @@ def calculate_subnets_route():
                 num_hosts = int(data.get('num_hosts', '1'))
                 if not 1 <= num_hosts <= 4094:
                     raise SegmentCountError("Number of hosts must be between 1 and 4094")
-            except ValueError:
+            except (ValueError, TypeError):
                 raise SegmentCountError("Number of hosts must be a valid integer")
             # Generate a unique task ID
             task_id = secrets.token_hex(16)
@@ -735,22 +838,14 @@ def calculate_host_subnet(task_id, network_ip, num_hosts):
 def handle_uncaught_exception(e):
     app.logger.error(f"An unhandled server error occurred: {e}", exc_info=True)
     message = 'An unexpected server error occurred. Please try again later.'
-    if app.debug:
+    # Never expose internal error details in production
+    if app.debug and os.environ.get('FLASK_ENV') != 'production':
         message = f"An unexpected server error occurred: {str(e)}"
     response = jsonify({'status': 'error', 'message': message})
     response.status_code = 500
     return response
 
-@app.route('/debug/notes')
-def debug_notes():
-    notes = Note.query.all()
-    return jsonify([{
-        'id': note.id,
-        'title': note.title,
-        'user_id': note.user_id,
-        'created_at': note.created_at.isoformat(),
-        'updated_at': note.updated_at.isoformat()
-    } for note in notes])
+# Debug endpoint removed for security - was exposing all notes
 
 @app.route('/notes/from_calculator', methods=['POST'])
 @login_required
@@ -959,4 +1054,6 @@ def inject_now():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(debug=True)
+    # Only run in debug mode if explicitly set in environment
+    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
+    app.run(debug=debug_mode)
