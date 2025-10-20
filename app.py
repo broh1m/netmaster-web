@@ -450,21 +450,17 @@ def create_note():
 @limiter.limit("10 per minute")
 def delete_note(note_id):
     try:
-        app.logger.info(f"Delete note attempt - Note ID: {note_id}, Current User ID: {current_user.id}")
         note = Note.get_by_id(note_id)
         
         if not note:
-            app.logger.warning(f"Note not found - Note ID: {note_id}")
             flash('Note not found', 'error')
             return redirect(url_for('notes'))
             
         if note.user_id != current_user.id:
-            app.logger.warning(f"Access denied - Note user_id: {note.user_id}, Current user_id: {current_user.id}")
             flash('Access denied', 'error')
             return redirect(url_for('notes'))
         
         note.delete()
-        app.logger.info(f"Note deleted successfully - Note ID: {note_id}")
         flash('Note deleted successfully', 'success')
         return redirect(url_for('notes'))
         
@@ -478,11 +474,8 @@ def delete_note(note_id):
 @limiter.limit("10 per minute")
 def edit_note(note_id):
     try:
-        app.logger.info(f"Edit note attempt - Note ID: {note_id}, Current User ID: {current_user.id if current_user.is_authenticated else 'Not authenticated'}")
         note = Note.get_by_id(note_id)
-        app.logger.info(f"Note found: {note is not None}")
         if not note or note.user_id != current_user.id:
-            app.logger.warning(f"Access denied - Note user_id: {note.user_id if note else 'Note not found'}, Current user_id: {current_user.id}")
             flash('Note not found or access denied', 'error')
             return redirect(url_for('notes'))
         
@@ -839,7 +832,7 @@ def handle_uncaught_exception(e):
     app.logger.error(f"An unhandled server error occurred: {e}", exc_info=True)
     message = 'An unexpected server error occurred. Please try again later.'
     # Never expose internal error details in production
-    if app.debug and os.environ.get('FLASK_ENV') != 'production':
+    if os.environ.get('FLASK_ENV') != 'production' and os.environ.get('FLASK_DEBUG', 'False').lower() == 'true':
         message = f"An unexpected server error occurred: {str(e)}"
     response = jsonify({'status': 'error', 'message': message})
     response.status_code = 500
@@ -1056,4 +1049,4 @@ if __name__ == '__main__':
         db.create_all()
     # Only run in debug mode if explicitly set in environment
     debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
-    app.run(debug=debug_mode)
+    app.run(debug=debug_mode, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
