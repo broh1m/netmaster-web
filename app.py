@@ -342,7 +342,7 @@ EMAIL_REGEX = re.compile(r"[^@]+@[^@]+\.[^@]+")
 PASSWORD_REGEX = re.compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$')
 
 @app.route('/login', methods=['GET', 'POST'])
-@limiter.limit("5 per minute")
+# @limiter.limit("5 per minute")  # Temporarily disabled
 def login():
     if request.method == 'POST':
         username = sanitize_input(request.form.get('username', '').strip())
@@ -374,7 +374,7 @@ def logout():
     return redirect(url_for('login'))
 
 @app.route('/register', methods=['GET', 'POST'])
-@limiter.limit("10 per hour")
+# @limiter.limit("10 per hour")  # Temporarily disabled
 def register():
     if request.method == 'POST':
         try:
@@ -434,7 +434,7 @@ def register():
 
 @app.route('/notes')
 @login_required
-@limiter.limit("30 per minute")
+# @limiter.limit("30 per minute")  # Temporarily disabled
 def notes():
     try:
         page = request.args.get('page', 1, type=int)
@@ -449,7 +449,7 @@ def notes():
 
 @app.route('/notes/create', methods=['POST'])
 @login_required
-@limiter.limit("10 per minute")
+# @limiter.limit("10 per minute")  # Temporarily disabled
 def create_note():
     try:
         title = sanitize_input(request.form.get('title', '').strip())
@@ -471,7 +471,7 @@ def create_note():
 
 @app.route('/notes/delete/<int:note_id>', methods=['POST'])
 @login_required
-@limiter.limit("10 per minute")
+# @limiter.limit("10 per minute")  # Temporarily disabled
 def delete_note(note_id):
     try:
         note = Note.get_by_id(note_id)
@@ -495,7 +495,7 @@ def delete_note(note_id):
 
 @app.route('/notes/edit/<int:note_id>', methods=['GET', 'POST'])
 @login_required
-@limiter.limit("10 per minute")
+# @limiter.limit("10 per minute")  # Temporarily disabled
 def edit_note(note_id):
     try:
         note = Note.get_by_id(note_id)
@@ -539,7 +539,7 @@ def view_note(note_id):
         return redirect(url_for('notes'))
 
 @app.route('/calculate_subnets', methods=['POST'])
-@limiter.limit("20 per minute")
+# @limiter.limit("20 per minute")  # Temporarily disabled
 def calculate_subnets_route():
     try:
         if request.is_json:
@@ -915,7 +915,7 @@ def settings():
 
 @app.route('/update_profile', methods=['POST'])
 @login_required
-@limiter.limit("10 per minute")
+# @limiter.limit("10 per minute")  # Temporarily disabled
 def update_profile():
     try:
         theme = request.form.get('theme', 'auto')
@@ -954,7 +954,7 @@ def update_profile():
 
 @app.route('/change_password', methods=['POST'])
 @login_required
-@limiter.limit("5 per minute")
+# @limiter.limit("5 per minute")  # Temporarily disabled
 def change_password():
     try:
         current_password = request.form.get('current_password', '').strip()
@@ -988,7 +988,7 @@ def change_password():
 
 @app.route('/delete_account', methods=['POST'])
 @login_required
-@limiter.limit("3 per hour")
+# @limiter.limit("3 per hour")  # Temporarily disabled
 def delete_account():
     try:
         confirmation = request.form.get('delete_confirmation', '').strip()
@@ -1016,7 +1016,7 @@ def delete_account():
 
 @app.route('/export_data')
 @login_required
-@limiter.limit("5 per hour")
+# @limiter.limit("5 per hour")  # Temporarily disabled
 def export_data():
     try:
         # Get user data
