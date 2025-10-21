@@ -102,12 +102,22 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Please log in to access this page.'
 
-# Initialize rate limiter
-limiter = Limiter(
-    app=app,
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"]
-)
+# Initialize rate limiter with Redis storage (fallback to memory for development)
+try:
+    import redis
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        default_limits=["200 per day", "50 per hour"],
+        storage_uri="redis://localhost:6379"
+    )
+except ImportError:
+    # Fallback to memory storage for development
+    limiter = Limiter(
+        app=app,
+        key_func=get_remote_address,
+        default_limits=["200 per day", "50 per hour"]
+    )
 
 # Database configuration
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///notes.db'
@@ -158,7 +168,8 @@ def transaction():
     """Enhanced transaction context manager with timeout and error handling"""
     try:
         # Set statement timeout for this transaction
-        db.session.execute('PRAGMA busy_timeout = 30000')  # 30 seconds timeout
+        from sqlalchemy import text
+        db.session.execute(text('PRAGMA busy_timeout = 30000'))  # 30 seconds timeout
         yield
         db.session.commit()
     except SQLAlchemyError as e:
@@ -178,7 +189,8 @@ def check_db_health():
     """Check database connection health"""
     try:
         # Try to execute a simple query
-        db.session.execute('SELECT 1')
+        from sqlalchemy import text
+        db.session.execute(text('SELECT 1'))
         return True
     except Exception as e:
         app.logger.error(f"Database health check failed: {str(e)}")
@@ -204,7 +216,8 @@ class DatabaseConnectionManager:
     def execute_with_timeout(query, timeout=30):
         """Execute a query with a timeout"""
         try:
-            db.session.execute('PRAGMA busy_timeout = ?', (timeout * 1000,))
+            from sqlalchemy import text
+            db.session.execute(text('PRAGMA busy_timeout = ?'), (timeout * 1000,))
             return db.session.execute(query)
         except Exception as e:
             app.logger.error(f"Query execution failed: {str(e)}")
