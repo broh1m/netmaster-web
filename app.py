@@ -103,16 +103,27 @@ login_manager.login_view = 'login'
 login_manager.login_message = 'Please log in to access this page.'
 
 # Initialize rate limiter with Redis storage (fallback to memory for development)
-try:
-    import redis
+def get_redis_uri():
+    """Get Redis URI if available, otherwise return None"""
+    try:
+        import redis
+        # Test Redis connection with a short timeout
+        r = redis.Redis(host='localhost', port=6379, db=0, socket_connect_timeout=1)
+        r.ping()
+        return "redis://localhost:6379"
+    except (ImportError, redis.ConnectionError, redis.TimeoutError, Exception):
+        return None
+
+redis_uri = get_redis_uri()
+if redis_uri:
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,
         default_limits=["200 per day", "50 per hour"],
-        storage_uri="redis://localhost:6379"
+        storage_uri=redis_uri
     )
-except ImportError:
-    # Fallback to memory storage for development
+else:
+    # Fallback to memory storage when Redis is not available
     limiter = Limiter(
         app=app,
         key_func=get_remote_address,
